@@ -1,0 +1,6 @@
+/build/
+/.idea
+/.codebuddy
+__pycache__/
+*.pyc
+/dist/CD_Companion.exe
