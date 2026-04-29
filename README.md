@@ -1,28 +1,28 @@
 # Crimson Desert — Map Companion
 
-Sistema de overlay para o mapa do [MapGenie](https://mapgenie.io/crimson-desert) que lê
-a posição do jogador em tempo real a partir da memória do processo `CrimsonDesert.exe`
-e exibe um marcador ao vivo no mapa interativo.
+A real-time overlay for the [MapGenie](https://mapgenie.io/crimson-desert) interactive map
+that reads the player's live position from `CrimsonDesert.exe` process memory and displays
+a marker on the map as you move.
 
 ---
 
-## Arquitetura
+## Architecture
 
 ```
 CrimsonDesert.exe
-       │  (pymem — leitura de memória via code caves / hooks)
+       │  (pymem — memory reading via code caves / hooks)
        ▼
-CD_Companion.exe  (processo único, sem console)
-  ├── Thread daemon: server/main.py   ← servidor WebSocket em background
+CD_Companion.exe  (single process, no console)
+  ├── Daemon thread: server/main.py   ← WebSocket server in background
   │     ws://0.0.0.0:7891
   │
-  └── Main thread: overlay/main.py    ← única janela visível (PyQt5)
+  └── Main thread: overlay/main.py    ← only visible window (PyQt5)
         └── QWebEngineView → mapgenie.io + inject.js
 ```
 
 ---
 
-## Pré-requisitos
+## Requirements
 
 ```
 pip install pymem websockets PyQt5 PyQtWebEngine
@@ -32,149 +32,149 @@ Python **≥ 3.10**.
 
 ---
 
-## Como usar
+## Usage
 
-### Modo fácil — Executável compilado
+### Easy mode — Compiled executable
 
-Execute `CD_Companion.exe` (ou `python launcher.py`).
+Run `CD_Companion.exe` (or `python launcher.py`).
 
-O executável:
-1. Pede elevação UAC automaticamente
-2. Inicia o servidor WebSocket como thread daemon
-3. Abre o overlay PyQt5 — **uma única janela, sem consoles extras**
-4. Logs vão para `cd_server.log` no diretório do executável
+The executable:
+1. Requests UAC elevation automatically
+2. Starts the WebSocket server as a daemon thread
+3. Opens the PyQt5 overlay — **a single window, no extra consoles**
+4. Logs are written to `cd_server.log` in the executable's directory
 
-### Modo manual (desenvolvimento)
+### Manual mode (development)
 
 ```bat
-:: Overlay + servidor embutido (janela única)
+:: Overlay + embedded server (single window)
 python -m overlay.main
 
-:: Ou servidor standalone (para debug)
+:: Or standalone server (for debugging)
 python -m server.main
 ```
 
-### Compilar o executável
+### Building the executable
 
 ```bat
 scripts\build_launcher.bat
 ```
 
-Gera `dist\CD_Companion.exe` com `--noconsole` (sem janela de console).
+Produces `dist\CD_Companion.exe` with `--noconsole` (no console window).
 
 ---
 
 ## Interface
 
-### Janela principal (overlay)
+### Main window (overlay)
 
-| Elemento | Descrição |
+| Element | Description |
 |---|---|
-| Hover no topo | Exibe a barra de controles (modo normal) ou botões flutuantes (modo circular) |
-| `◀` | Voltar (histórico do WebView) |
-| `⚙` | Configurações |
-| `–` | Minimizar (mesmo efeito que Ctrl+Shift+M) |
-| `✕` | Fechar e salvar posição/tamanho |
-| Redimensionar | Qualquer borda ou canto da janela |
-| **Ctrl + arrastar** | Mover a janela arrastando em qualquer área |
+| Hover at top | Shows the control bar (normal mode) or floating buttons (circular mode) |
+| `◀` | Back (WebView history) |
+| `⚙` | Settings |
+| `–` | Minimize (same as Ctrl+Shift+M) |
+| `✕` | Close and save position/size |
+| Resize | Any edge or corner of the window |
+| **Ctrl + drag** | Move the window by dragging anywhere |
 
-**Atalho global:** `Ctrl+Shift+M` — mostrar / ocultar a janela
+**Global hotkey:** `Ctrl+Shift+M` — show / hide the window
 
-### Botão Follow (canto inferior direito do mapa)
+### Follow button (bottom-right corner of the map)
 
-| Ação | Efeito |
+| Action | Effect |
 |---|---|
-| Click | Ativa / desativa "seguir jogador" |
-| `⊞` (ao lado) | Abre painel completo (coordenadas, status, teleport) |
-| Segurar **Shift** | Pausa o follow temporariamente |
+| Click | Toggle "follow player" |
+| `⊞` (next to it) | Opens the full panel (coordinates, status, teleport) |
+| Hold **Shift** | Temporarily pauses follow |
 
-### Painel de status
+### Status panel
 
-- Coordenadas em tempo real: X, Z, Y + Realm (Pywel / Abyss)
-- **📍 Ir ao Marcador** — teleporta para o marcador colocado no mapa in-game
-- **↩ Abortar** — retorna à posição anterior ao último teleport
-- **🎯 Calibração** — modo de calibração
+- Real-time coordinates: X, Z, Y + Realm (Pywel / Abyss)
+- **📍 Go to Marker** — teleports to the in-game map marker
+- **↩ Abort** — returns to the position before the last teleport
+- **🎯 Calibration** — calibration mode
 
-### Painel de Waypoints (canto inferior esquerdo, botão ⭕)
+### Waypoints panel (bottom-left corner, ⭕ button)
 
-- **+ Salvar** — salva posição atual com nome
-- **⭕** — teleporta para o waypoint
-- **✕** — remove waypoint
-- Filtro por texto
+- **+ Save** — saves current position with a name
+- **⭕** — teleport to waypoint
+- **✕** — delete waypoint
+- Text filter
 
-### Teleport pelo centro da tela (botão ◎)
+### Center-screen teleport (◎ button)
 
-- Slider de altura Y
-- Teleporta para as coordenadas do centro visível do mapa
+- Y height slider
+- Teleports to the coordinates at the visible center of the map
 
 ---
 
 ## Teleport
 
-Todos os teleports aplicam automaticamente:
-- **HEIGHT_BOOST +10 unidades** no eixo Y (evita travar no chão)
-- **Invulnerabilidade por 10 segundos** após o teleport
+All teleports automatically apply:
+- **HEIGHT_BOOST +10 units** on the Y axis (prevents clipping into the ground)
+- **10 seconds of invulnerability** after each teleport
 
-Waypoints pessoais ficam em:
+Personal waypoints are stored at:
 ```
 %LOCALAPPDATA%\CD_Teleport\cd_overlay_waypoints.json
 ```
 
 ---
 
-## Calibração de coordenadas
+## Coordinate calibration
 
-O sistema converte coordenadas do jogo (X, Z) para lng/lat do MapGenie usando
-uma transformação afim calibrada com pontos de referência.
+The system converts game coordinates (X, Z) to MapGenie lng/lat using an affine
+transformation calibrated with reference points.
 
-**Calibrações padrão** (Pywel e Abyss) já estão embutidas.
+**Default calibrations** (Pywel and Abyss) are built-in.
 
-**Para recalibrar:**
-1. Abra o painel completo e clique em **🎯 Calibração: OFF** → ativa o modo
-2. No jogo, vá até um local reconhecível
-3. No mapa (MapGenie), clique exatamente sobre esse local
-4. O ponto é salvo em `%LOCALAPPDATA%\CD_Teleport\cd_calibration_pywel.json`
-5. Com **≥ 3 pontos**, a calibração afim substitui a linear padrão
-6. Para resetar: comando `reset_calibration` via WebSocket
+**To recalibrate:**
+1. Open the full panel and click **🎯 Calibration: OFF** to enable the mode
+2. In-game, go to a recognizable location
+3. On the map (MapGenie), click exactly on that location
+4. The point is saved to `%LOCALAPPDATA%\CD_Teleport\cd_calibration_pywel.json`
+5. With **≥ 3 points**, the affine calibration replaces the default linear one
+6. To reset: send `reset_calibration` command via WebSocket
 
 ---
 
-## Configurações
+## Settings
 
-Acessíveis pelo botão `⚙` na barra (hover no topo da janela):
+Accessible via the `⚙` button in the bar (hover at the top of the window):
 
-| Opção | Padrão | Descrição |
+| Option | Default | Description |
 |---|---|---|
-| Restaurar última posição do mapa | ✅ | Retorna ao local e zoom da última visita |
-| Ocultar Locais Encontrados | ✅ | Desativa "Found Locations" automaticamente |
-| Ocultar Painel Esquerdo | ☐ | Fecha o sidebar esquerdo ao carregar |
-| Ocultar Painel Direito | ☐ | Fecha o sidebar direito ao carregar |
-| Janela circular/oval | ☐ | Aplica máscara elíptica; redimensiona para 240×240 |
-| Seguir janela do jogo | ☐ | Move o overlay junto com a janela do jogo |
-| Transparência | 0% | Opacidade da janela (0% a 90%) |
-| Seta de direção | Auto | `Auto` / `Entity vector` / `Delta posição` |
-| Girar mapa com player | ☐ | Bearing do mapa segue o heading do jogador |
-| Girar mapa com câmera | ☐ | Bearing do mapa segue a câmera do jogo |
+| Restore last map position | ✅ | Returns to the location and zoom from the last visit |
+| Hide Found Locations | ✅ | Automatically disables "Found Locations" |
+| Hide Left Panel | ☐ | Closes the left sidebar on load |
+| Hide Right Panel | ☐ | Closes the right sidebar on load |
+| Circular/oval window | ☐ | Applies an elliptical mask; resizes to 240×240 |
+| Follow game window | ☐ | Moves the overlay along with the game window |
+| Transparency | 0% | Window opacity (0% to 90%) |
+| Direction arrow | Auto | `Auto` / `Entity vector` / `Position delta` |
+| Rotate map with player | ☐ | Map bearing follows the player's heading |
+| Rotate map with camera | ☐ | Map bearing follows the game camera |
 
-Salvas em `overlay_config.json` (diretório do executável ou do script).
+Saved in `overlay_config.json` (in the executable's or script's directory).
 
 ---
 
-## Hotkeys globais
+## Global hotkeys
 
-| Hotkey | Ação |
+| Hotkey | Action |
 |---|---|
-| `Ctrl+Shift+M` | Mostrar / ocultar overlay |
-| `F5` | Teleportar para marcador do mapa in-game |
-| `Shift+F5` | Abortar (voltar à posição pré-teleport) |
+| `Ctrl+Shift+M` | Show / hide overlay |
+| `F5` | Teleport to in-game map marker |
+| `Shift+F5` | Abort (return to pre-teleport position) |
 
-Hotkeys configuráveis em `%LOCALAPPDATA%\CD_Teleport\cd_hotkeys.json`.
+Hotkeys are configurable in `%LOCALAPPDATA%\CD_Teleport\cd_hotkeys.json`.
 
 ---
 
-## WebSocket — Protocolo
+## WebSocket protocol
 
-### Servidor → Clientes
+### Server → Clients
 
 ```json
 { "type": "position", "lng": -0.72, "lat": 0.61,
@@ -198,72 +198,72 @@ Hotkeys configuráveis em `%LOCALAPPDATA%\CD_Teleport\cd_hotkeys.json`.
 { "type": "location_toggle", "locationId": "549771", "found": true }
 ```
 
-### Clientes → Servidor
+### Clients → Server
 
-| `cmd` | Parâmetros | Efeito |
+| `cmd` | Parameters | Effect |
 |---|---|---|
-| `teleport` | `x, y, z` | Teleporta para coordenadas absolutas |
-| `teleport_map` | `lng, lat, y, realm` | Teleporta para ponto clicado no mapa |
-| `teleport_marker` | — | Teleporta para marcador do mapa in-game |
-| `abort` | — | Retorna à posição pré-teleport |
-| `move` | `dx, dy, dz` | Injeta delta de posição via physics hook |
-| `save_waypoint` | `name` | Salva posição atual |
-| `delete_waypoint` | `index` | Remove waypoint pelo índice |
-| `rename_waypoint` | `index, name` | Renomeia waypoint |
-| `add_calibration` | `lng, lat, realm` | Adiciona ponto de calibração |
-| `reset_calibration` | `realm` | Remove calibração salva |
-| `location_toggle` | `locationId, found` | Propaga marcação para outros clientes |
+| `teleport` | `x, y, z` | Teleport to absolute coordinates |
+| `teleport_map` | `lng, lat, y, realm` | Teleport to a point clicked on the map |
+| `teleport_marker` | — | Teleport to the in-game map marker |
+| `abort` | — | Return to pre-teleport position |
+| `move` | `dx, dy, dz` | Inject a position delta via physics hook |
+| `save_waypoint` | `name` | Save current position |
+| `delete_waypoint` | `index` | Remove waypoint by index |
+| `rename_waypoint` | `index, name` | Rename waypoint |
+| `add_calibration` | `lng, lat, realm` | Add a calibration point |
+| `reset_calibration` | `realm` | Remove saved calibration |
+| `location_toggle` | `locationId, found` | Propagate location mark to other clients |
 
 ---
 
-## Sync de marcações entre clientes
+## Location sync across clients
 
-Quando qualquer cliente marca ou desmarca uma location no MapGenie, a mudança é
-propagada automaticamente para todos os outros clientes conectados.
+When any client marks or unmarks a location on MapGenie, the change is automatically
+propagated to all other connected clients.
 
-1. O JS intercepta `fetch`/`XMLHttpRequest` para detectar PUT/DELETE em `/api/v1/user/locations/{id}`
-2. Envia `location_toggle` ao servidor
-3. O servidor faz broadcast para os demais clientes
-4. Cada cliente chama `window.mapManager.markLocationAsFound(id, found)` para atualizar visualmente
+1. The injected JS intercepts `fetch`/`XMLHttpRequest` to detect PUT/DELETE on `/api/v1/user/locations/{id}`
+2. Sends `location_toggle` to the server
+3. The server broadcasts to all other clients
+4. Each client calls `window.mapManager.markLocationAsFound(id, found)` to update visually
 
 ---
 
-## Estrutura de arquivos
+## File structure
 
 ```
-├── launcher.py              # Entry point — elevação UAC + chama overlay.main
+├── launcher.py              # Entry point — UAC elevation + calls overlay.main
 ├── server/
-│   ├── main.py              # Servidor WebSocket + broadcast de posição
+│   ├── main.py              # WebSocket server + position broadcast
 │   └── memory/engine.py     # TeleportEngine: attach, AOB scan, hooks, teleport
 ├── overlay/
-│   ├── main.py              # OverlayWindow + servidor como thread daemon
-│   ├── inject.js            # JS injetado no MapGenie (Template com $WS_URL)
+│   ├── main.py              # OverlayWindow + server as daemon thread
+│   ├── inject.js            # JS injected into MapGenie (Template with $WS_URL)
 │   ├── widgets.py           # SettingsDialog, TitleBar, InterceptPage, LoginPrompt
 │   └── config_defaults.py   # SETTING_DEFAULTS
 ├── shared/
-│   └── coord_math.py        # Funções puras: calibração, conversão, heading
+│   └── coord_math.py        # Pure functions: calibration, conversion, heading
 ├── tests/
-│   └── test_coords.py       # Testes unitários (shared.coord_math)
+│   └── test_coords.py       # Unit tests (shared.coord_math)
 └── scripts/
-    ├── build_launcher.bat   # Compila launcher.py → dist/CD_Companion.exe
-    ├── gen_cert.py          # Gera certificado SSL para WSS
-    └── gen_icon.py          # Gera ícone do launcher
+    ├── build_launcher.bat   # Compiles launcher.py → dist/CD_Companion.exe
+    ├── gen_cert.py          # Generates SSL certificate for WSS
+    └── gen_icon.py          # Generates launcher icon
 ```
 
 ---
 
-## Como o hook de memória funciona
+## How the memory hook works
 
-1. **AOB Scan**: busca padrões de bytes no módulo `CrimsonDesert.exe`
-2. **Code Cave**: aloca memória e escreve assembly que captura XYZ
-3. **JMP Patch**: substitui a instrução original por um `JMP` para o cave (trampoline)
-4. **Leitura**: o servidor lê os floats XYZ do bloco alocado a cada ~16 ms (60 Hz)
-5. **Mundo**: coordenadas locais + world offset = posição absoluta
+1. **AOB Scan**: searches for byte patterns in the `CrimsonDesert.exe` module
+2. **Code Cave**: allocates memory and writes assembly that captures XYZ
+3. **JMP Patch**: replaces the original instruction with a `JMP` to the cave (trampoline)
+4. **Reading**: the server reads XYZ floats from the allocated block every ~16 ms (60 Hz)
+5. **World**: local coordinates + world offset = absolute position
 
-Baseado no projeto [CDTT (dencoexe)](https://github.com/dencoexe/CDTT).
+Based on the [CDTT project (dencoexe)](https://github.com/dencoexe/CDTT).
 
 ---
 
-## Licença
+## License
 
-Este projeto é disponibilizado para fins educacionais. Use por sua conta e risco.
+This project is provided for educational purposes. Use at your own risk.
