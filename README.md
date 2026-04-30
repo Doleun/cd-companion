@@ -76,6 +76,7 @@ Produces `dist\CD_Companion.exe` with `--noconsole` (no console window).
 | `–` | Minimize (same as Ctrl+Shift+M) |
 | `✕` | Close and save position/size |
 | Resize | Any edge or corner of the window |
+| Drag title bar | Move the window (native drag, no lag) |
 | **Ctrl + drag** | Move the window by dragging anywhere |
 
 **Global hotkey:** `Ctrl+Shift+M` — show / hide the window
@@ -106,6 +107,10 @@ Produces `dist\CD_Companion.exe` with `--noconsole` (no console window).
 
 - Y height slider
 - Teleports to the coordinates at the visible center of the map
+
+### In-game map marker
+
+When a destination marker is set in-game, a red pin appears on MapGenie at the same location. Click the pin to open a teleport popup. If the marker is outside the visible map area, a smaller indicator floats on the window border pointing in its direction.
 
 ---
 
@@ -155,6 +160,7 @@ Accessible via the `⚙` button in the bar (hover at the top of the window):
 | Direction arrow | Auto | `Auto` / `Entity vector` / `Position delta` |
 | Rotate map with player | ☐ | Map bearing follows the player's heading |
 | Rotate map with camera | ☐ | Map bearing follows the game camera |
+| Disable GPU vsync | ☐ | Fixes FPS cap when using the overlay on a secondary monitor with a different refresh rate (requires restart) |
 
 Saved in `overlay_config.json` (in the executable's or script's directory).
 
@@ -198,14 +204,22 @@ Hotkeys are configurable in `%LOCALAPPDATA%\CD_Teleport\cd_hotkeys.json`.
 { "type": "location_toggle", "locationId": "549771", "found": true }
 ```
 
+```json
+{ "type": "map_marker", "lng": -0.51, "lat": 0.43, "x": -6100.0, "y": 12.0, "z": 2800.0 }
+```
+
+```json
+{ "type": "map_marker_cleared" }
+```
+
 ### Clients → Server
 
 | `cmd` | Parameters | Effect |
 |---|---|---|
 | `teleport` | `x, y, z` | Teleport to absolute coordinates |
 | `teleport_map` | `lng, lat, y, realm` | Teleport to a point clicked on the map |
-| `teleport_marker` | — | Teleport to the in-game map marker |
-| `abort` | — | Return to pre-teleport position |
+| `teleport_marker` | | Teleport to the in-game map marker |
+| `abort` | | Return to pre-teleport position |
 | `move` | `dx, dy, dz` | Inject a position delta via physics hook |
 | `save_waypoint` | `name` | Save current position |
 | `delete_waypoint` | `index` | Remove waypoint by index |
