@@ -314,6 +314,10 @@
     if (hasCameraHeading && msg.heading === lastCameraHeading) return;
     hasCameraHeading = true;
     lastCameraHeading = msg.heading;
+    if (window.__cdSettings) {
+      rotateWithCamera = !!window.__cdSettings.rotateWithCamera;
+      rotateWithPlayer = !!window.__cdSettings.rotateWithPlayer;
+    }
     if (!rotateWithCamera || !following) {
       updateArrowRotation();
       return;
@@ -1202,8 +1206,10 @@
 
   window.__cdApplyRotationSettings = function(cfg) {
     if (!cfg) return;
-    setRotateWithPlayer(!!cfg.rotateWithPlayer);
-    setRotateWithCamera(!!cfg.rotateWithCamera);
+    const rwp = !!cfg.rotateWithPlayer;
+    const rwc = !!cfg.rotateWithCamera;
+    setRotateWithPlayer(rwp);
+    setRotateWithCamera(rwc);
   };
 
   window.__cdApplyRoundLayout = function(cfg) {

@@ -1,3 +1,8 @@
+## v0.02.03
+
+### Fixes
+- Fix camera rotation setting not applying without overlay restart: `__cdApplyRotationSettings` now pre-extracts values before calling setters, preventing `setRotateWithPlayer` from writing a stale `rotateWithCamera` back to `window.__cdSettings` before `setRotateWithCamera` runs
+
 ## v0.02.02
 
 ### Internal
