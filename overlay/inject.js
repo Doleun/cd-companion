@@ -1,5 +1,15 @@
 
 (function () {
+  const iv = setInterval(() => {
+    if (!window.isEmbedded) {
+      window.isEmbedded = true;
+      window.dispatchEvent(new Event('resize'))
+    }
+  }, 500);
+  setTimeout(() => clearInterval(iv), 30000);
+})();
+
+(function () {
   if (window.__cdOverlay) return;
   window.__cdOverlay = true;
 
@@ -1096,10 +1106,11 @@
         body.map .navbar { display: none !important; }
         #left-sidebar, #right-sidebar { display: block !important; }
       }
+      #left-sidebar { z-index: 2 !important; }
       .mapboxgl-ctrl-bottom-right, #map-type-control { display: none !important; }
       #cdCenterCrosshair {
         position:fixed;inset:0;width:100vw;height:100vh;
-        pointer-events:none;z-index:9998;
+        pointer-events:none;z-index:1;
       }
       #cdCenterCrosshair::before,
       #cdCenterCrosshair::after {
