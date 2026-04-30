@@ -367,7 +367,7 @@
     // Botão follow (sempre visível, reflete estado)
     const followBtn = document.createElement('button');
     followBtn.id = 'cdOvFollowFloat';
-    followBtn.title = 'Alternar Follow';
+    followBtn.title = 'Toggle Follow';
     followBtn.style.cssText = `height:36px;padding:0 12px;border-radius:6px;
       background:rgba(12,30,20,.95);border:1.5px solid rgba(80,220,120,.6);
       color:#60e890;font:bold 11px 'Segoe UI',sans-serif;cursor:pointer;
@@ -396,23 +396,23 @@
       <div id="cdOvCoords" style="font:11px/1.5 Consolas,monospace;color:#bbb;margin-bottom:2px">--</div>
       <div id="cdOvStatus" style="font-size:10px;color:#e07070">Connecting…</div>
       <div style="display:flex;gap:4px;margin-top:5px">
-        <button id="cdOvMarker" title="Teleportar para marcador do mapa in-game"
+        <button id="cdOvMarker" title="Teleport to in-game map marker"
           style="flex:1;background:rgba(100,160,255,.15);border:1px solid rgba(100,160,255,.4);
           color:#80b4ff;font:10px 'Segoe UI';padding:3px 5px;border-radius:4px;cursor:pointer">
-          📍 Ir ao Marcador
+          📍 Go to Marker
         </button>
-        <button id="cdOvAbort" title="Voltar para posição antes do último teleport"
+        <button id="cdOvAbort" title="Return to position before last teleport"
           style="flex:1;background:rgba(255,100,100,.12);border:1px solid rgba(255,100,100,.35);
           color:#ff8080;font:10px 'Segoe UI';padding:3px 5px;border-radius:4px;
           cursor:pointer;opacity:.35;pointer-events:none">
-          ↩ Abortar
+          ↩ Abort
         </button>
       </div>
-      <button id="cdOvCalibrate" title="Modo calibração: clique no mapa para adicionar ponto de referência"
+      <button id="cdOvCalibrate" title="Calibration mode: click on the map to add a reference point"
         style="width:100%;margin-top:4px;background:rgba(255,208,96,.08);
         border:1px solid rgba(255,208,96,.2);color:#888;
         font:10px 'Segoe UI';padding:3px 5px;border-radius:4px;cursor:pointer">
-        🎯 Calibração: OFF
+        🎯 Calibration: OFF
       </button>
     `;
     document.body.appendChild(el);
@@ -437,7 +437,7 @@
     if (followFloat) {
       const isRound = !!(window.__cdSettings && window.__cdSettings.roundWindow);
       followFloat.textContent  = isRound ? 'F' : `🗺 Follow: ${following ? 'ON' : 'OFF'}`;
-      followFloat.title = `Alternar Follow (${following ? 'ON' : 'OFF'})`;
+      followFloat.title = `Toggle Follow (${following ? 'ON' : 'OFF'})`;
       followFloat.style.background  = following ? 'rgba(12,30,20,.95)'  : 'rgba(30,20,0,.95)';
       followFloat.style.borderColor = following ? 'rgba(80,220,120,.6)' : 'rgba(255,208,96,.6)';
       followFloat.style.color       = following ? '#60e890' : '#ffd060';
@@ -453,8 +453,8 @@
     if (status) {
       const ok = ws && ws.readyState === 1;
       status.textContent = ok
-        ? (lastPos ? `Realm: ${lastPos.realm}` : 'Mova o personagem para iniciar')
-        : 'Server offline — rode position_server.py';
+        ? (lastPos ? `Realm: ${lastPos.realm}` : 'Move the character to start')
+        : 'Server offline';
       status.style.color = ok ? '#60e890' : '#e07070';
     }
     if (abort) {
@@ -462,7 +462,7 @@
       abort.style.pointerEvents = hasPreTeleport ? 'auto' : 'none';
     }
     if (calib) {
-      calib.textContent       = calibrationMode ? '🎯 Calibração: ON (clique no mapa)' : '🎯 Calibração: OFF';
+      calib.textContent       = calibrationMode ? '🎯 Calibration: ON (click map)' : '🎯 Calibration: OFF';
       calib.style.color       = calibrationMode ? '#ffd060' : '#888';
       calib.style.borderColor = calibrationMode ? 'rgba(255,208,96,.5)' : 'rgba(255,208,96,.2)';
       calib.style.background  = calibrationMode ? 'rgba(255,208,96,.15)' : 'rgba(255,208,96,.08)';
@@ -484,7 +484,7 @@
     const canvas = document.querySelector('.mapboxgl-canvas');
     if (canvas) canvas.style.cursor = calibrationMode ? 'crosshair' : '';
     if (calibrationMode)
-      setStatus('Clique no mapa na posição do personagem', '#ffd060');
+      setStatus('Click on the map at the character position', '#ffd060');
   }
 
   function onMapClick(e) {
@@ -662,7 +662,7 @@
           if (msg.ok) {
             hasPreTeleport = true; updatePanel();
           } else {
-            setStatus(msg.err || 'Sem marcador no mapa', '#e07070', 3000);
+            setStatus(msg.err || 'No map marker set', '#e07070', 3000);
           }
 
         } else if (msg.type === 'teleport_map_result') {
@@ -670,15 +670,15 @@
             hasPreTeleport = true; updatePanel();
           } else {
             hasPreTeleport = false; updatePanel();
-            setStatus(msg.err || 'Teleport pelo mapa falhou', '#e07070', 3000);
+            setStatus(msg.err || 'Map teleport failed', '#e07070', 3000);
           }
 
         } else if (msg.type === 'calibration_result') {
           if (msg.reset) {
             calibrationMode = false; updatePanel();
-            setStatus('Calibração resetada', '#60e890', 3000);
+            setStatus('Calibration reset', '#60e890', 3000);
           } else if (msg.ok) {
-            setStatus(`Calibração: ${msg.count} ponto(s) salvo(s)`, '#60e890', 3000);
+            setStatus(`Calibration: ${msg.count} point(s) saved`, '#60e890', 3000);
           }
         } else if (msg.type === 'location_toggle') {
           _onLocationToggle(msg.locationId, msg.found);
@@ -939,7 +939,7 @@
     el.innerHTML = `
       <div style="display:flex;align-items:center;gap:6px">
         <span style="color:#ffd060;font-weight:600;flex:1;font-size:12px">⭕ Waypoints</span>
-        <button id="cdWpSave" title="Salvar posição atual"
+        <button id="cdWpSave" title="Save current position"
           style="background:rgba(255,208,96,.15);border:1px solid rgba(255,208,96,.4);
           color:#ffd060;font:11px 'Segoe UI';padding:2px 8px;border-radius:4px;cursor:pointer">
           + Salvar
