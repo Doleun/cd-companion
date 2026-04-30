@@ -5,4 +5,5 @@
 
 ### Internal
 - Replace polling loop with `threading.Event` for server startup synchronization: overlay now wakes up the instant the WebSocket server is ready instead of probing the port every 200ms
+- If the server fails to start (e.g. port already in use), the overlay no longer waits the full 10-second timeout before continuing
 

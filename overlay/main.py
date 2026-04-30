@@ -521,6 +521,7 @@ def _start_server_thread(ready_event):
     except Exception as e:
         import logging
         logging.getLogger('cd_server').error("Server thread crashed: %s", e)
+        ready_event.set()  # desbloqueia o overlay imediatamente
 
 def main():
     # Habilitar DPI awareness antes de criar o app
