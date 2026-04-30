@@ -658,7 +658,7 @@ async def _broadcast_loop():
 
 WSS_PORT = 7892
 
-async def _main():
+async def _main(ready_event=None):
     import ssl as _ssl, os, contextlib, websockets, websockets.server
     _dir  = os.path.dirname(os.path.abspath(__file__))
     _cert = os.path.join(_dir, 'certs', 'server.crt')
@@ -689,6 +689,9 @@ async def _main():
         import threading
         _hk_thread = threading.Thread(target=_hotkey_thread, daemon=True)
         _hk_thread.start()
+
+        if ready_event is not None:
+            ready_event.set()
 
         await _broadcast_loop()
 

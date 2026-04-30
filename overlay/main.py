@@ -511,13 +511,13 @@ class OverlayWindow(QMainWindow):
 
 # ── Main ──────────────────────────────────────────────────────────────
 
-def _start_server_thread():
+def _start_server_thread(ready_event):
     """Inicia o servidor WebSocket como thread daemon.
     Roda asyncio.run(_main()) em background — quando o overlay fecha,
     a thread daemon morre junto."""
     from server.main import _main
     try:
-        asyncio.run(_main())
+        asyncio.run(_main(ready_event))
     except Exception as e:
         import logging
         logging.getLogger('cd_server').error("Server thread crashed: %s", e)
@@ -541,19 +541,11 @@ def main():
     _check_dependencies()
 
     # ── Servidor WebSocket como thread daemon ─────────────────────────
+    _server_ready = threading.Event()
     server_thread = threading.Thread(
-        target=_start_server_thread, daemon=True, name="cd-server")
+        target=_start_server_thread, args=(_server_ready,), daemon=True, name="cd-server")
     server_thread.start()
-
-    # Pequena espera para o servidor subir antes do overlay conectar
-    import time, socket
-    deadline = time.time() + 10
-    while time.time() < deadline:
-        try:
-            with socket.create_connection(('localhost', 7891), timeout=0.5):
-                break
-        except Exception:
-            time.sleep(0.2)
+    _server_ready.wait(timeout=10)
 
     cfg = load_config()
 
