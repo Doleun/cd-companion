@@ -555,6 +555,9 @@ def main():
         except Exception:
             time.sleep(0.2)
 
+    if not getattr(sys, 'frozen', False):
+        sys.argv += ['--remote-debugging-port=9222']
+
     app = QApplication(sys.argv)
     app.setApplicationName('CD Map Overlay')
 
