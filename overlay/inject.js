@@ -496,7 +496,7 @@
 
   function pan(lng, lat) {
     const m = getMap();
-    if (m) m.easeTo({ center: [lng, lat], duration: 350 });
+    if (m) m.easeTo({ center: [lng, lat], duration: 50 });
   }
 
   function createCenterCrosshair() {
