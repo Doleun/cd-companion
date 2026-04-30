@@ -19,6 +19,7 @@
 
   let ws              = null;
   let marker          = null;
+  let mapMarker       = null;
   let map             = null;
   let following       = true;
   let shiftHeld       = false;
@@ -101,6 +102,7 @@
     if (window.map && typeof window.map.easeTo === 'function') {
       map = window.map;
       createMarker();
+      createMapMarker();
       map.on('click', onMapClick);
       adjustIconSize();
       map.on('zoom', adjustIconSize);
@@ -109,6 +111,56 @@
     return map;
   }
   const mapIv = setInterval(() => { if (getMap()) clearInterval(mapIv); }, 500);
+
+  function createMapMarker() {
+    if (mapMarker || !map) return;
+    const el = document.createElement('div');
+    el.style.cssText = 'position:relative;width:0;height:0;cursor:pointer';
+    const img = document.createElement('img');
+    img.src = 'https://raw.githubusercontent.com/leandrodiogenes/cd-companion/main/mark.png';
+    img.style.cssText = 'position:absolute;width:32px;height:32px;transform:translate(-50%,-100%);filter:drop-shadow(0 0 4px rgba(255,80,80,.9));';
+    el.appendChild(img);
+    el.addEventListener('click', (e) => {
+      e.stopPropagation();
+      showMapMarkerPopup(el);
+    });
+    mapMarker = new mapboxgl.Marker({ element: el, anchor: 'bottom' })
+      .setLngLat([0, 0]).addTo(map);
+    mapMarker.getElement().style.display = 'none';
+  }
+
+  function showMapMarkerPopup(anchorEl) {
+    let popup = document.getElementById('cdMapMarkerPopup');
+    if (popup) { popup.remove(); return; }
+    popup = document.createElement('div');
+    popup.id = 'cdMapMarkerPopup';
+    const rect = anchorEl.getBoundingClientRect();
+    popup.style.cssText = `
+      position:fixed;z-index:99999;
+      left:${rect.left}px;top:${rect.top - 40}px;
+      transform:translate(-50%,-100%);
+      background:rgba(12,12,18,.95);
+      border:1px solid rgba(255,80,80,.45);border-radius:6px;
+      padding:6px 10px;box-shadow:0 3px 12px rgba(0,0,0,.5);
+      display:flex;flex-direction:column;align-items:center;gap:6px;
+      font:12px 'Segoe UI',sans-serif;color:#e8e8e8;white-space:nowrap;
+    `;
+    popup.innerHTML = `
+      <span style="font-size:11px;color:#aaa">Map Marker</span>
+      <button id="cdMapMarkerTpBtn"
+        style="background:rgba(255,80,80,.2);border:1px solid rgba(255,80,80,.5);
+        color:#ff6666;font:11px 'Segoe UI';padding:3px 10px;border-radius:4px;cursor:pointer">
+        📍 Teleport here
+      </button>
+    `;
+    document.body.appendChild(popup);
+    popup.querySelector('#cdMapMarkerTpBtn').addEventListener('click', () => {
+      sendCmd({ cmd: 'teleport_marker' });
+      popup.remove();
+    });
+    const close = (e) => { if (!popup.contains(e.target) && e.target !== anchorEl) { popup.remove(); document.removeEventListener('click', close); } };
+    setTimeout(() => document.addEventListener('click', close), 0);
+  }
 
   function createMarker() {
     if (marker || !map) return;
@@ -573,6 +625,16 @@
           }
         } else if (msg.type === 'location_toggle') {
           _onLocationToggle(msg.locationId, msg.found);
+
+        } else if (msg.type === 'map_marker') {
+          if (!mapMarker) createMapMarker();
+          if (mapMarker) {
+            mapMarker.setLngLat([msg.lng, msg.lat]);
+            mapMarker.getElement().style.display = '';
+          }
+
+        } else if (msg.type === 'map_marker_cleared') {
+          if (mapMarker) mapMarker.getElement().style.display = 'none';
         }
 
         // backward-compat: mensagens sem type são posição

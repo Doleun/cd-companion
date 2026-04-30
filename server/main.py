@@ -636,6 +636,24 @@ async def _broadcast_loop():
                     "raw": round(cam_raw, 4),
                 }))
 
+        # Broadcast map marker position
+        if _clients and _engine and _engine.hooks_installed:
+            dest = _engine.get_map_dest()
+            if dest:
+                realm = "abyss" if dest[1] > ABYSS_HEIGHT_THRESHOLD else "pywel"
+                cal = _get_cal(realm)
+                lng, lat = game_to_lnglat(dest[0], dest[2], cal)
+                await _broadcast_all(json.dumps({
+                    "type": "map_marker",
+                    "lng": round(lng, 8),
+                    "lat": round(lat, 8),
+                    "x": round(dest[0], 2),
+                    "y": round(dest[1], 2),
+                    "z": round(dest[2], 2),
+                }))
+            else:
+                await _broadcast_all(json.dumps({"type": "map_marker_cleared"}))
+
         await asyncio.sleep(BROADCAST_INTERVAL)
 
 WSS_PORT = 7892

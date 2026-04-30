@@ -1,3 +1,15 @@
+## v0.02.00
+
+### Map Marker
+- In-game map destination marker now shows on MapGenie in real time (overlay and Chrome extension)
+- Click the marker pin to open a popup with a Teleport button
+- Automated CI/CD build via GitHub Actions on every release tag
+
+### Known issues
+- The marker pin stays visible after removing the destination marker in-game. The memory hook reads the last known position and does not yet detect when the marker is cleared. Working on a fix.
+
+---
+
 ## v0.01.00 — Initial Release
 
 ### Core
