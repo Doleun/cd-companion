@@ -20,6 +20,8 @@
   let ws              = null;
   let marker          = null;
   let mapMarker       = null;
+  let mapDestLng      = null;
+  let mapDestLat      = null;
   let map             = null;
   let following       = true;
   let shiftHeld       = false;
@@ -160,6 +162,61 @@
     });
     const close = (e) => { if (!popup.contains(e.target) && e.target !== anchorEl) { popup.remove(); document.removeEventListener('click', close); } };
     setTimeout(() => document.addEventListener('click', close), 0);
+  }
+
+  // ── Off-screen map destination indicator ──────────────────────────
+  function ensureEdgeIndicator() {
+    if (document.getElementById('cdEdgeIndicator')) return;
+    const el = document.createElement('div');
+    el.id = 'cdEdgeIndicator';
+    el.style.cssText = `
+      position:fixed;z-index:9000;width:28px;height:28px;
+      pointer-events:none;display:none;
+      transform-origin:center center;
+    `;
+    el.innerHTML = `
+      <img src="https://raw.githubusercontent.com/leandrodiogenes/cd-companion/main/mark.png"
+        style="width:28px;height:28px;filter:drop-shadow(0 0 4px rgba(255,80,80,.9));display:block;">
+    `;
+    document.body.appendChild(el);
+  }
+
+  function updateEdgeIndicator() {
+    const el = document.getElementById('cdEdgeIndicator');
+    if (!el || mapDestLng === null || mapDestLat === null) return;
+
+    const container = map.getContainer();
+    const rect = container.getBoundingClientRect();
+    const pt = map.project([mapDestLng, mapDestLat]);
+
+    const pad = 36;
+    const inView = pt.x >= pad && pt.x <= rect.width - pad &&
+                   pt.y >= pad && pt.y <= rect.height - pad;
+
+    if (inView) { el.style.display = 'none'; return; }
+
+    el.style.display = 'block';
+
+    const cx = rect.width / 2;
+    const cy = rect.height / 2;
+    const angle = Math.atan2(pt.y - cy, pt.x - cx);
+    const hw = rect.width / 2 - pad;
+    const hh = rect.height / 2 - pad;
+    const tx = Math.cos(angle);
+    const ty = Math.sin(angle);
+    const scale = Math.min(Math.abs(hw / (tx || 1e-9)), Math.abs(hh / (ty || 1e-9)));
+    const ex = rect.left + cx + tx * scale;
+    const ey = rect.top + cy + ty * scale;
+
+    el.style.left = (ex - 14) + 'px';
+    el.style.top  = (ey - 14) + 'px';
+  }
+
+  function installEdgeIndicatorListener() {
+    if (map.__cdEdgeListener) return;
+    map.__cdEdgeListener = true;
+    map.on('move', updateEdgeIndicator);
+    map.on('zoom', updateEdgeIndicator);
   }
 
   function createMarker() {
@@ -627,14 +684,23 @@
           _onLocationToggle(msg.locationId, msg.found);
 
         } else if (msg.type === 'map_marker') {
+          mapDestLng = msg.lng;
+          mapDestLat = msg.lat;
           if (!mapMarker) createMapMarker();
+          ensureEdgeIndicator();
+          installEdgeIndicatorListener();
           if (mapMarker) {
             mapMarker.setLngLat([msg.lng, msg.lat]);
             mapMarker.getElement().style.display = '';
           }
+          updateEdgeIndicator();
 
         } else if (msg.type === 'map_marker_cleared') {
+          mapDestLng = null;
+          mapDestLat = null;
           if (mapMarker) mapMarker.getElement().style.display = 'none';
+          const ei = document.getElementById('cdEdgeIndicator');
+          if (ei) ei.style.display = 'none';
         }
 
         // backward-compat: mensagens sem type são posição
