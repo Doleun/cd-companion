@@ -4,3 +4,5 @@
 __pycache__/
 *.pyc
 /dist/CD_Companion.exe
+/overlay/overlay_config.json
+/cd_server.log
