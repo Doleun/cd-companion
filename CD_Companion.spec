@@ -5,7 +5,7 @@ a = Analysis(
     ['launcher.py'],
     pathex=[],
     binaries=[],
-    datas=[('server', 'server'), ('overlay', 'overlay'), ('shared', 'shared'), ('certs', 'certs')],
+    datas=[('server', 'server'), ('overlay', 'overlay'), ('shared', 'shared')],
     hiddenimports=[],
     hookspath=[],
     hooksconfig={},
