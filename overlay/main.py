@@ -555,13 +555,16 @@ def main():
         except Exception:
             time.sleep(0.2)
 
+    cfg = load_config()
+
     if not getattr(sys, 'frozen', False):
         sys.argv += ['--remote-debugging-port=9222']
 
+    if cfg.get('disableGpuVsync'):
+        sys.argv += ['--disable-gpu-vsync']
+
     app = QApplication(sys.argv)
     app.setApplicationName('CD Map Overlay')
-
-    cfg = load_config()
     screen_w, screen_h = get_screen_size()
 
     window = OverlayWindow(cfg, screen_w, screen_h)

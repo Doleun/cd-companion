@@ -12,4 +12,5 @@ SETTING_DEFAULTS = {
     'rotateWithPlayer':     False,
     'rotateWithCamera':     False,
     'centerTeleportY':       1000.0,
+    'disableGpuVsync':       False,
 }

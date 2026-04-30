@@ -129,6 +129,10 @@ class SettingsDialog(QDialog):
         layout.addLayout(center_y_row)
 
         # Direction arrow
+        section('Performance')
+        option('disableGpuVsync', 'Disable GPU vsync (multi-monitor fix)',
+               'Fixes FPS cap when using the overlay on a secondary monitor with a different refresh rate. Requires restart.')
+
         section('Direction arrow')
         option('rotateWithPlayer', 'Rotate map with player',
                'The map rotates to always show the player\'s forward direction at the top')
