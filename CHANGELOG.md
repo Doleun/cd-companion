@@ -1,8 +1,14 @@
 ## v0.02.00
 
 ### Map Marker
-- In-game map destination marker now shows on MapGenie in real time (overlay and Chrome extension)
+- In-game map destination marker now shows on MapGenie in real time
 - Click the marker pin to open a popup with a Teleport button
+- Off-screen edge indicator shows when the marker is outside the visible map area, positioned on the window border in the direction of the marker
+
+### Fixes and improvements
+- Reduced map follow pan duration from 350ms to 50ms to eliminate position lag
+- Fixed title bar drag losing the window at high mouse speeds by switching to native Windows drag
+- Added "Disable GPU vsync" option in Settings to fix FPS cap when running the overlay on a secondary monitor with a different refresh rate (requires restart)
 - Automated CI/CD build via GitHub Actions on every release tag
 
 ### Known issues

@@ -330,11 +330,7 @@ QPushButton { background:transparent; border:none;
 
     def mousePressEvent(self, e):
         if e.button() == Qt.LeftButton:
-            self._drag_pos = e.globalPos() - self.window().frameGeometry().topLeft()
-
-    def mouseMoveEvent(self, e):
-        if e.buttons() == Qt.LeftButton and self._drag_pos:
-            self.window().move(e.globalPos() - self._drag_pos)
-
-    def mouseReleaseEvent(self, e):
-        self._drag_pos = None
+            import ctypes
+            hwnd = int(self.window().winId())
+            ctypes.windll.user32.ReleaseCapture()
+            ctypes.windll.user32.SendMessageW(hwnd, 0x0112, 0xF012, 0)  # WM_SYSCOMMAND, SC_MOVE|HTCAPTION
