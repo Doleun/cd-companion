@@ -150,6 +150,7 @@ Accessible via the `⚙` button in the bar (hover at the top of the window):
 
 | Option | Default | Description |
 |---|---|---|
+| Enable teleport | ✅ | When disabled, teleport hooks (hook_e, hook_c) are not injected — avoids conflicts with other mods. Restart overlay and game to apply |
 | Restore last map position | ✅ | Returns to the location and zoom from the last visit |
 | Hide Found Locations | ✅ | Automatically disables "Found Locations" |
 | Hide Left Panel | ☐ | Closes the left sidebar on load |
@@ -197,7 +198,7 @@ Hotkeys are configurable in `%LOCALAPPDATA%\CD_Teleport\cd_hotkeys.json`.
 ```
 
 ```json
-{ "type": "engine_status", "status": "attached" }
+{ "type": "engine_status", "status": "attached", "teleportEnabled": true }
 ```
 
 ```json
