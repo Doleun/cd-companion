@@ -76,5 +76,5 @@ jobs:
           version: ${{ steps.meta.outputs.version }}
           display_name: CD_Companion source ${{ steps.meta.outputs.version }}
           description: ${{ steps.meta.outputs.notes }}
-          file_category: optional
+          file_category: miscellaneous
           archive_existing_file: true
