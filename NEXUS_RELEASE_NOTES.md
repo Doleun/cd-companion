@@ -1,4 +1,4 @@
-## v0.03.03
+## v0.03.04
 
 Fixed an issue where the map destination marker (the in-game navigation marker) would stop showing up after closing and reopening the companion without restarting the game. The fix also covers cases where the camera rotation stops working after an unclean shutdown. Both should now recover automatically without requiring a full game restart.
 
