@@ -1,4 +1,5 @@
-## v0.03.05
+## v0.03.06
 
-### Internal
-- Test NexusMods workflow
+### Fixed
+- Off-screen map marker indicator now hugs the overlay border
+- Oval window mode: indicator follows elliptical boundary instead of rectangular

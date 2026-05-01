@@ -191,24 +191,39 @@
     const rect = container.getBoundingClientRect();
     const pt = map.project([mapDestLng, mapDestLat]);
 
-    const pad = 36;
-    const inView = pt.x >= pad && pt.x <= rect.width - pad &&
-                   pt.y >= pad && pt.y <= rect.height - pad;
+    const pad = 14;
+    const isRound = !!(window.__cdSettings && window.__cdSettings.roundWindow);
+    const cx = rect.width / 2;
+    const cy = rect.height / 2;
+    const hw = cx - pad;
+    const hh = cy - pad;
+
+    let inView;
+    if (isRound) {
+      const dx = (pt.x - cx) / hw;
+      const dy = (pt.y - cy) / hh;
+      inView = dx * dx + dy * dy <= 1;
+    } else {
+      inView = pt.x >= pad && pt.x <= rect.width - pad &&
+               pt.y >= pad && pt.y <= rect.height - pad;
+    }
 
     if (inView) { el.style.display = 'none'; return; }
 
     el.style.display = 'block';
 
-    const cx = rect.width / 2;
-    const cy = rect.height / 2;
     const angle = Math.atan2(pt.y - cy, pt.x - cx);
-    const hw = rect.width / 2 - pad;
-    const hh = rect.height / 2 - pad;
-    const tx = Math.cos(angle);
-    const ty = Math.sin(angle);
-    const scale = Math.min(Math.abs(hw / (tx || 1e-9)), Math.abs(hh / (ty || 1e-9)));
-    const ex = rect.left + cx + tx * scale;
-    const ey = rect.top + cy + ty * scale;
+    let ex, ey;
+    if (isRound) {
+      ex = rect.left + cx + hw * Math.cos(angle);
+      ey = rect.top  + cy + hh * Math.sin(angle);
+    } else {
+      const tx = Math.cos(angle);
+      const ty = Math.sin(angle);
+      const scale = Math.min(Math.abs(hw / (tx || 1e-9)), Math.abs(hh / (ty || 1e-9)));
+      ex = rect.left + cx + tx * scale;
+      ey = rect.top  + cy + ty * scale;
+    }
 
     el.style.left = (ex - 14) + 'px';
     el.style.top  = (ey - 14) + 'px';
