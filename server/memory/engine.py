@@ -681,14 +681,7 @@ class TeleportEngine:
                 if not hook_addr:
                     continue
                 self._remember_orig_bytes(hook_addr)
-                patch = self._jmp_patch(hook_addr, cave_addr)
-                self.pm.write_bytes(hook_addr, patch, 7)
-                verify = self.pm.read_bytes(hook_addr, 7)
-                if verify != patch:
-                    log.warning("Hook write verification FAILED at 0x%X — written=%s read=%s",
-                                hook_addr, patch.hex(), verify.hex())
-                else:
-                    log.debug("Hook write verified at 0x%X", hook_addr)
+                self.pm.write_bytes(hook_addr, self._jmp_patch(hook_addr, cave_addr), 7)
             # Camera hook — patch de 9 bytes (instrução vmovss [r15+0x4A4],xmm2)
             if self.hook_cam:
                 orig = self.pm.read_bytes(self.hook_cam, 9)
