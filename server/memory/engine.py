@@ -351,19 +351,30 @@ class TeleportEngine:
             log.info("Camera heading hook found")
         elif "hook_cam_rva" in saved:
             rva = int(saved["hook_cam_rva"])
-            # Valida que os bytes no endereço cacheado ainda batem com o padrão original.
-            # Se não baterem (stale), o jogo provavelmente foi reiniciado com layout de memória
-            # diferente, ou o servidor foi reconectado com o jogo já em execução há algum tempo.
-            # Nesse caso, limpa a chave do cache para forçar um AOB scan limpo no próximo attach,
-            # em vez de reusar um endereço inválido indefinidamente.
-            if 0 <= rva <= len(data) - len(self.ORIG_HOOK_CAM) and data[rva:rva + len(self.ORIG_HOOK_CAM)] == self.ORIG_HOOK_CAM:
-                self.hook_cam = base + rva
-                log.info("Camera heading hook loaded from cache")
+            # Valida que os bytes no endereço cacheado ainda batem com o padrão original,
+            # OU que o nosso próprio JMP patch ainda está lá (shutdown não-limpo anterior).
+            # Num shutdown abrupto, uninstall_hooks() não roda e o JMP permanece em memória.
+            # Na reabertura, os bytes começam com \xE9 — isso é o nosso hook, o endereço é válido.
+            # Se os bytes não forem nenhum dos dois casos, o jogo foi reiniciado com layout diferente:
+            # limpa o cache e força AOB scan limpo no próximo attach.
+            if 0 <= rva <= len(data) - len(self.ORIG_HOOK_CAM):
+                chunk = data[rva:rva + len(self.ORIG_HOOK_CAM)]
+                if chunk == self.ORIG_HOOK_CAM:
+                    self.hook_cam = base + rva
+                    log.info("Camera heading hook loaded from cache")
+                elif chunk[:1] == b'\xE9':
+                    self.hook_cam = base + rva
+                    log.info("Camera heading hook recovered (JMP still installed from previous session)")
+                else:
+                    self.hook_cam = 0
+                    saved.pop("hook_cam_rva", None)
+                    _save_hook_offsets(saved)
+                    log.warning("Cached camera hook stale, cache cleared, will re-scan on next attach")
             else:
                 self.hook_cam = 0
                 saved.pop("hook_cam_rva", None)
                 _save_hook_offsets(saved)
-                log.warning("Cached camera hook stale — cache cleared, will re-scan on next attach")
+                log.warning("Cached camera hook stale, cache cleared, will re-scan on next attach")
         else:
             self.hook_cam = 0
             log.warning("Camera heading AOB not found — camera_heading unavailable")
