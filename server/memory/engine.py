@@ -114,7 +114,8 @@ class TeleportEngine:
     OFF_CF   = 0x380  # cave F: camera yaw hook
     BLOCK_SZ = 0x1000
 
-    def __init__(self):
+    def __init__(self, teleport_enabled: bool = True):
+        self.teleport_enabled = teleport_enabled
         self.pm = None
         self.module = None
         self.attached = False
@@ -151,6 +152,11 @@ class TeleportEngine:
         if not self.hooks_installed:
             return "scanning"
         return "attached"
+
+    @property
+    def teleport_available(self):
+        """Retorna True se teleport está habilitado E o hook_e está instalado."""
+        return self.teleport_enabled and bool(self.hook_e)
 
     def _reset_runtime_state(self):
         self.block = 0
@@ -304,7 +310,10 @@ class TeleportEngine:
             log.warning("Position hook AOB not found — skipping hook_b")
 
         idx = data.find(self.AOB_HEALTH)
-        if idx != -1:
+        if not self.teleport_enabled:
+            self.hook_c = 0
+            log.info("Teleport disabled — skipping health/invuln hook (hook_c)")
+        elif idx != -1:
             self.hook_c = base + idx
         elif "hook_c_rva" in saved:
             self.hook_c = base + int(saved["hook_c_rva"])
@@ -323,7 +332,10 @@ class TeleportEngine:
             log.warning("Map dest AOB not found — map marker teleport unavailable")
 
         hook_e_addr = self._find_phys_delta_hook(data, base)
-        if hook_e_addr:
+        if not self.teleport_enabled:
+            self.hook_e = 0
+            log.info("Teleport disabled — skipping physics delta hook (hook_e)")
+        elif hook_e_addr:
             self.hook_e = hook_e_addr
             log.info("Physics delta hook found — teleport via delta injection enabled")
         elif "hook_e_rva" in saved:
@@ -758,6 +770,8 @@ class TeleportEngine:
             return None, None
 
     def set_invuln(self, on: bool):
+        if not self.teleport_enabled:
+            return
         if self.inv:
             try:
                 self.pm.write_bytes(self.inv, b'\x01' if on else b'\x00', 1)
@@ -778,6 +792,8 @@ class TeleportEngine:
             return None
 
     def teleport_to_abs(self, abs_x, abs_y, abs_z):
+        if not self.teleport_enabled:
+            return False, "Teleport is disabled in settings"
         # Método preferido: delta injection via hook_e (physics loop)
         # [r13] opera no mesmo espaço que os static globals e get_player_pos()
         # (coordenadas absolutas) — não subtrair world_offset aqui.

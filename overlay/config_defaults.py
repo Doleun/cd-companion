@@ -13,4 +13,5 @@ SETTING_DEFAULTS = {
     'rotateWithCamera':     False,
     'centerTeleportY':       1000.0,
     'disableGpuVsync':       False,
+    'teleportEnabled':       True,
 }

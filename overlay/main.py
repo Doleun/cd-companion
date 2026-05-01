@@ -536,6 +536,13 @@ def main():
     )
     os.environ.setdefault('CD_LOG_FILE', os.path.join(app_dir, 'cd_server.log'))
 
+    # ── Teleport toggle ───────────────────────────────────────────────
+    # Lê a config ANTES de iniciar o servidor para definir a env var
+    # que controla se os hooks de teleport (hook_e, hook_c) são injetados.
+    cfg = load_config()
+    if not cfg.get('teleportEnabled', True):
+        os.environ['CD_TELEPORT_ENABLED'] = '0'
+
     # ── Checagem de admin e dependências (antes de qualquer coisa) ────
     from server.main import assert_admin, _check_dependencies
     assert_admin()
@@ -547,8 +554,6 @@ def main():
         target=_start_server_thread, args=(_server_ready,), daemon=True, name="cd-server")
     server_thread.start()
     _server_ready.wait(timeout=10)
-
-    cfg = load_config()
 
     if not getattr(sys, 'frozen', False):
         sys.argv += ['--remote-debugging-port=9222']
