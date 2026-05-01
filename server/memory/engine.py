@@ -321,25 +321,44 @@ class TeleportEngine:
             self.hook_c = 0
             log.warning("Health hook AOB not found — invuln unavailable")
 
-        idx = data.find(self.AOB_MAP)
-        if idx != -1:
-            self.hook_d = base + idx + self.AOB_MAP_HOOK_OFFSET
-            log.info("Map dest hook found")
-        elif "hook_d_rva" in saved:
-            self.hook_d = base + int(saved["hook_d_rva"])
-            log.info("Map dest hook loaded from cache")
-        else:
-            # Fallback: shutdown anterior não-limpo deixou o JMP instalado e não há cache.
-            # Os primeiros AOB_MAP_HOOK_OFFSET bytes nunca são patchados, então buscamos
-            # esses bytes seguidos de \xE9 (JMP) para localizar o hook stale.
-            stale_prefix = self.AOB_MAP[:self.AOB_MAP_HOOK_OFFSET] + b'\xE9'
-            idx2 = data.find(stale_prefix)
-            if idx2 != -1:
-                self.hook_d = base + idx2 + self.AOB_MAP_HOOK_OFFSET
-                log.info("Map dest hook recovered (JMP still installed from previous session)")
+        # Cache tem prioridade sobre AOB scan: o módulo pode ter múltiplas ocorrências
+        # do padrão, e quando o JMP da sessão anterior ainda está instalado, find()
+        # pula o endereço correto e acerta uma ocorrência errada.
+        if "hook_d_rva" in saved:
+            rva = int(saved["hook_d_rva"])
+            if 0 <= rva <= len(data) - len(self.ORIG_HOOK_D):
+                chunk = data[rva:rva + len(self.ORIG_HOOK_D)]
+                if chunk == self.ORIG_HOOK_D:
+                    self.hook_d = base + rva
+                    log.info("Map dest hook loaded from cache")
+                elif chunk[:1] == b'\xE9':
+                    self.hook_d = base + rva
+                    log.info("Map dest hook recovered (JMP still installed from previous session)")
+                else:
+                    self.hook_d = 0
+                    saved.pop("hook_d_rva", None)
+                    _save_hook_offsets(saved)
+                    log.warning("Cached map dest hook stale, cache cleared")
             else:
                 self.hook_d = 0
-                log.warning("Map dest AOB not found — map marker unavailable")
+                saved.pop("hook_d_rva", None)
+                _save_hook_offsets(saved)
+                log.warning("Cached map dest hook RVA out of range, cache cleared")
+        else:
+            idx = data.find(self.AOB_MAP)
+            if idx != -1:
+                self.hook_d = base + idx + self.AOB_MAP_HOOK_OFFSET
+                log.info("Map dest hook found")
+            else:
+                # Sem cache e JMP stale: busca pelos bytes não-patchados + opcode JMP
+                stale_prefix = self.AOB_MAP[:self.AOB_MAP_HOOK_OFFSET] + b'\xE9'
+                idx2 = data.find(stale_prefix)
+                if idx2 != -1:
+                    self.hook_d = base + idx2 + self.AOB_MAP_HOOK_OFFSET
+                    log.info("Map dest hook recovered via stale prefix scan")
+                else:
+                    self.hook_d = 0
+                    log.warning("Map dest AOB not found — map marker unavailable")
 
         hook_e_addr = self._find_phys_delta_hook(data, base)
         if not self.teleport_enabled:
