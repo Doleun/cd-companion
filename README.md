@@ -4,6 +4,11 @@ A real-time overlay for the [MapGenie](https://mapgenie.io/crimson-desert) inter
 that reads the player's live position from `CrimsonDesert.exe` process memory and displays
 a marker on the map as you move.
 
+### Chrome Extension
+
+Use the map on a second monitor or separate window without the overlay.
+Download from the [cd-companion-chrome](https://github.com/leandrodiogenes/cd-companion-chrome/releases/latest) releases page.
+
 ---
 
 ## Architecture
