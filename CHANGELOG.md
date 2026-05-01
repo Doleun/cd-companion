@@ -1,9 +1,10 @@
-## v0.02.02
+## v0.03.00
 
-### Fixes
-- Fix camera rotation setting not applying without overlay restart: `__cdApplyRotationSettings` now pre-extracts values before calling setters, preventing `setRotateWithPlayer` from writing a stale `rotateWithCamera` back to `window.__cdSettings` before `setRotateWithCamera` runs
+### Features
+- **Optional teleport**: new "Enable teleport" setting allows disabling teleport entirely. When off, the physics delta hook (hook_e) and invulnerability hook (hook_c) are not injected into the game, avoiding conflicts with other mods
+- Teleport UI elements (waypoints button, center teleport button, Go to Marker, Abort, map marker teleport popup) hide automatically when teleport is disabled
+- UI reacts immediately on settings save; hooks require restarting overlay and game
+- Browser extensions (Chrome/Firefox) react to `engine_status.teleportEnabled` broadcast and hide teleport controls accordingly
 
-### Internal
-- Replace polling loop with `threading.Event` for server startup synchronization: overlay now wakes up the instant the WebSocket server is ready instead of probing the port every 200ms
-- If the server fails to start (e.g. port already in use), the overlay no longer waits the full 10-second timeout before continuing
-
+### Protocol
+- `engine_status` message now includes `teleportEnabled` boolean field
