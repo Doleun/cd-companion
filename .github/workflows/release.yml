@@ -47,8 +47,9 @@ jobs:
         id: notes
         run: |
           $content = Get-Content -Path NEXUS_RELEASE_NOTES.md -Raw
-          $escaped = $content -replace "`r`n", "\n" -replace "`n", "\n" -replace '"', '\"'
-          echo "body=$escaped" >> $env:GITHUB_OUTPUT
+          "body<<EOF" >> $env:GITHUB_OUTPUT
+          $content >> $env:GITHUB_OUTPUT
+          "EOF" >> $env:GITHUB_OUTPUT
 
       - name: Upload exe to NexusMods
         uses: Nexus-Mods/upload-action@v1.0.0-beta.5
