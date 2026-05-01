@@ -31,7 +31,9 @@ jobs:
         run: pyinstaller CD_Companion.spec
 
       - name: Package source zip
-        run: Compress-Archive -Path * -DestinationPath dist/CD_Companion_source_${{ github.ref_name }}.zip -Force
+        run: |
+          $items = Get-ChildItem -Path . -Exclude dist,build,__pycache__,'*.spec' | Select-Object -ExpandProperty FullName
+          Compress-Archive -Path $items -DestinationPath dist/CD_Companion_source_${{ github.ref_name }}.zip -Force
 
       - name: Upload Release Asset
         uses: softprops/action-gh-release@v2
