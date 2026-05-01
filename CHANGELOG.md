@@ -1,10 +1,4 @@
-## v0.03.00
+## v0.03.01
 
-### Features
-- **Optional teleport**: new "Enable teleport" setting allows disabling teleport entirely. When off, the physics delta hook (hook_e) and invulnerability hook (hook_c) are not injected into the game, avoiding conflicts with other mods
-- Teleport UI elements (waypoints button, center teleport button, Go to Marker, Abort, map marker teleport popup) hide automatically when teleport is disabled
-- UI reacts immediately on settings save; hooks require restarting overlay and game
-- Browser extensions (Chrome/Firefox) react to `engine_status.teleportEnabled` broadcast and hide teleport controls accordingly
-
-### Protocol
-- `engine_status` message now includes `teleportEnabled` boolean field
+### Fixes
+- **Camera heading recovery after unclean shutdown**: closing the overlay without a clean shutdown left the camera hook JMP patch installed in game memory. On re-open, the AOB scan failed to find the original bytes and the cache validation rejected the address as stale, resulting in "Camera heading AOB not found" until the game was restarted. The companion now detects that its own hook is still installed and recovers the address without requiring a game restart
