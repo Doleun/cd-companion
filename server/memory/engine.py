@@ -327,9 +327,19 @@ class TeleportEngine:
             log.info("Map dest hook found")
         elif "hook_d_rva" in saved:
             self.hook_d = base + int(saved["hook_d_rva"])
+            log.info("Map dest hook loaded from cache")
         else:
-            self.hook_d = 0
-            log.warning("Map dest AOB not found — map marker teleport unavailable")
+            # Fallback: shutdown anterior não-limpo deixou o JMP instalado e não há cache.
+            # Os primeiros AOB_MAP_HOOK_OFFSET bytes nunca são patchados, então buscamos
+            # esses bytes seguidos de \xE9 (JMP) para localizar o hook stale.
+            stale_prefix = self.AOB_MAP[:self.AOB_MAP_HOOK_OFFSET] + b'\xE9'
+            idx2 = data.find(stale_prefix)
+            if idx2 != -1:
+                self.hook_d = base + idx2 + self.AOB_MAP_HOOK_OFFSET
+                log.info("Map dest hook recovered (JMP still installed from previous session)")
+            else:
+                self.hook_d = 0
+                log.warning("Map dest AOB not found — map marker unavailable")
 
         hook_e_addr = self._find_phys_delta_hook(data, base)
         if not self.teleport_enabled:
@@ -652,7 +662,14 @@ class TeleportEngine:
                 if not hook_addr:
                     continue
                 self._remember_orig_bytes(hook_addr)
-                self.pm.write_bytes(hook_addr, self._jmp_patch(hook_addr, cave_addr), 7)
+                patch = self._jmp_patch(hook_addr, cave_addr)
+                self.pm.write_bytes(hook_addr, patch, 7)
+                verify = self.pm.read_bytes(hook_addr, 7)
+                if verify != patch:
+                    log.warning("Hook write verification FAILED at 0x%X — written=%s read=%s",
+                                hook_addr, patch.hex(), verify.hex())
+                else:
+                    log.debug("Hook write verified at 0x%X", hook_addr)
             # Camera hook — patch de 9 bytes (instrução vmovss [r15+0x4A4],xmm2)
             if self.hook_cam:
                 orig = self.pm.read_bytes(self.hook_cam, 9)
