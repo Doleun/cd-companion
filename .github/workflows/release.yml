@@ -43,6 +43,13 @@ jobs:
             dist/CD_Companion_source_${{ github.ref_name }}.zip
           body_path: CHANGELOG.md
 
+      - name: Read release notes
+        id: notes
+        run: |
+          $content = Get-Content -Path NEXUS_RELEASE_NOTES.md -Raw
+          $escaped = $content -replace "`r`n", "\n" -replace "`n", "\n" -replace '"', '\"'
+          echo "body=$escaped" >> $env:GITHUB_OUTPUT
+
       - name: Upload exe to NexusMods
         uses: Nexus-Mods/upload-action@v1.0.0-beta.5
         with:
@@ -51,7 +58,7 @@ jobs:
           filename: dist/CD_Companion.exe
           version: ${{ github.ref_name }}
           display_name: CD_Companion ${{ github.ref_name }}
-          description: ${{ github.event.release.body }}
+          description: ${{ steps.notes.outputs.body }}
           file_category: main
           archive_existing_file: true
 
@@ -63,6 +70,6 @@ jobs:
           filename: dist/CD_Companion_source_${{ github.ref_name }}.zip
           version: ${{ github.ref_name }}
           display_name: CD_Companion source ${{ github.ref_name }}
-          description: ${{ github.event.release.body }}
+          description: ${{ steps.notes.outputs.body }}
           file_category: main
           archive_existing_file: true
