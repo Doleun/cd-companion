@@ -136,6 +136,7 @@ class TeleportEngine:
         self.xyz_addr = (0, 0, 0)   # (x_addr, y_addr, z_addr) — estáticos globais
         self._trampolines = []
         self._far_mode = False
+        self._hook_e_predecessor = 0  # trampoline de outro mod hookado no mesmo ponto (ex: OpenFlight)
 
     def attach(self):
         if self.pm or self.attached or self.orig_bytes or self.block:
@@ -175,6 +176,7 @@ class TeleportEngine:
         self.orig_bytes.clear()
         self._trampolines.clear()
         self._far_mode = False
+        self._hook_e_predecessor = 0
         self.hooks_installed = False
 
     def detach(self):
@@ -235,7 +237,10 @@ class TeleportEngine:
 
     def _remember_orig_bytes(self, hook_addr):
         current = self.pm.read_bytes(hook_addr, self.HOOK_PATCH_SIZE)
-        if current[:1] == b'\xE9' and current[-2:] == b'\x90\x90':
+        if hook_addr == self.hook_e and self._hook_e_predecessor:
+            # Predecessor detectado: salva o JMP do outro mod para restaurar corretamente no detach.
+            self.orig_bytes[hook_addr] = current
+        elif current[:1] == b'\xE9' and current[-2:] == b'\x90\x90':
             self.orig_bytes[hook_addr] = self._canonical_orig_bytes(hook_addr)
         else:
             self.orig_bytes[hook_addr] = current
@@ -243,7 +248,9 @@ class TeleportEngine:
     def _find_phys_delta_hook(self, data, base):
         """Localiza o ponto de hook no physics delta (movaps xmm0,xmm6 / subss xmm9,xmm8)
         confirmado por addps xmm0,[r13] + movups [r13],xmm0 nos 8 bytes seguintes.
-        Retorna endereço absoluto ou 0."""
+        Retorna endereço absoluto ou 0.
+        Também detecta quando o ponto já foi hookado por outro mod (bytes = E9 JMP) —
+        nesse caso retorna o endereço assim mesmo para que o caller detecte o predecessor."""
         confirm = self.AOB_PHYS_DELTA_CONFIRM
         hook    = self.AOB_PHYS_DELTA_HOOK
         pos = 0
@@ -252,6 +259,10 @@ class TeleportEngine:
             if i == -1:
                 break
             if i >= 8 and data[i - 8:i] == hook:
+                return base + i - 8
+            if i >= 8 and data[i - 8] == 0xE9:
+                # Outro mod (ex: OpenFlight) já hookou este ponto — retorna o endereço
+                # para que scan_and_hook detecte e configure o chaining.
                 return base + i - 8
             pos = i + 1
         return 0
@@ -373,6 +384,32 @@ class TeleportEngine:
         else:
             self.hook_e = 0
             log.warning("Physics delta hook not found — teleport fallback to direct write")
+
+        # Detectar se outro mod (ex: OpenFlight) já hookou hook_e antes do companion.
+        # Lemos os bytes diretamente via pm.read_bytes (não via data[] do _read_module,
+        # que pode ter zeros nessa região se o chunk falhou na leitura em massa).
+        # Se o primeiro byte for E9, pode ser: (a) JMP de outro mod ativo, ou
+        # (b) JMP stale do companion numa sessão anterior que crashou sem fazer detach.
+        # Distinguimos tentando ler 1 byte do destino do JMP: se a página foi liberada
+        # (VirtualFreeEx do detach anterior), pymem lança exceção → stale, sobreescrever.
+        # Se a leitura funciona → trampoline de outro mod ativo → encadear.
+        if self.hook_e and self.teleport_enabled:
+            try:
+                live_bytes = self.pm.read_bytes(self.hook_e, 5)
+                if live_bytes[0] == 0xE9:
+                    rel32 = struct.unpack_from('<i', live_bytes, 1)[0]
+                    candidate = self.hook_e + 5 + rel32
+                    try:
+                        self.pm.read_bytes(candidate, 1)
+                        self._hook_e_predecessor = candidate
+                        log.info("Existing hook detected at hook_e — will chain through predecessor trampoline (+8)")
+                    except Exception:
+                        self._hook_e_predecessor = 0
+                        log.info("Stale JMP at hook_e (previous companion session without clean detach) — will overwrite")
+                else:
+                    self._hook_e_predecessor = 0
+            except Exception:
+                self._hook_e_predecessor = 0
 
         idx = data.find(self.AOB_CAM)
         if idx != -1:
@@ -579,7 +616,13 @@ class TeleportEngine:
         """
         tp  = self.tp
         xyz = self.xyz_addr[0]   # static global X (Y=+4, Z=+8, consecutivos)
-        ret = self.hook_e + 8    # retorna para addps xmm0,[r13]
+        # Se outro mod (ex: OpenFlight) já hookou este ponto, encadeia para o trampoline
+        # dele pulando os 8 bytes iniciais (que re-executam os bytes originais).
+        # Caso contrário, retorna direto para hook_e+8 (addps xmm0,[r13]).
+        if self._hook_e_predecessor:
+            ret = self._hook_e_predecessor + 8
+        else:
+            ret = self.hook_e + 8
 
         c = bytearray()
 
