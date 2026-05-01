@@ -463,7 +463,8 @@ class OverlayWindow(QMainWindow):
         self._view.page().runJavaScript(
             f'window.__cdSettings = {json.dumps(settings)};'
             f'window.__cdApplyRoundLayout && window.__cdApplyRoundLayout(window.__cdSettings);'
-            f'window.__cdApplyRotationSettings && window.__cdApplyRotationSettings(window.__cdSettings);')
+            f'window.__cdApplyRotationSettings && window.__cdApplyRotationSettings(window.__cdSettings);'
+            f'window.__cdUpdateTeleportVisibility && window.__cdUpdateTeleportVisibility();')
 
     def _on_load_finished(self, ok):
         if ok:

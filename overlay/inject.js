@@ -1269,20 +1269,36 @@
   window.__cdApplySettings = applySettings;
   applySettings(window.__cdSettings || {});
 
+  // ── Teleport visibility (reage a mudanças em tempo real) ──────────
+  function updateTeleportVisibility() {
+    teleportEnabled = !(window.__cdSettings && window.__cdSettings.teleportEnabled === false);
+    const display = teleportEnabled ? '' : 'none';
+    const wpBtn = document.getElementById('cdWpToggle');
+    const ctBtn = document.getElementById('cdCenterTp');
+    const wpPanel = document.getElementById('cdWpPanel');
+    const ctPanel = document.getElementById('cdCenterTpPanel');
+    const tpRow = document.getElementById('cdOvTeleportRow');
+    if (wpBtn) wpBtn.style.display = display;
+    if (ctBtn) ctBtn.style.display = display;
+    if (tpRow) tpRow.style.display = teleportEnabled ? 'flex' : 'none';
+    if (!teleportEnabled) {
+      if (wpPanel) wpPanel.style.display = 'none';
+      if (ctPanel) ctPanel.style.display = 'none';
+    }
+  }
+  window.__cdUpdateTeleportVisibility = updateTeleportVisibility;
+
   createCenterCrosshair();
   ensureStatusToggleBtn();
   updatePanel();
-  if (teleportEnabled) {
-    ensureWpToggleBtn();
-    ensureCenterTeleportBtn();
-    ensureCenterTeleportPanel();
-  }
+  ensureWpToggleBtn();
+  ensureCenterTeleportBtn();
+  ensureCenterTeleportPanel();
   applyRoundLayout(!!(window.__cdSettings && window.__cdSettings.roundWindow));
   // ambos os painéis começam ocultos
-  if (teleportEnabled) {
-    ensureWaypointPanel();
-    renderWaypoints();
-  }
+  ensureWaypointPanel();
+  renderWaypoints();
+  updateTeleportVisibility();
   connect();
   setInterval(() => {
     if (window.mapManager && typeof window.mapManager.updateFoundLocationsStyle === 'function')
