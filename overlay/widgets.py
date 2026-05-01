@@ -108,7 +108,8 @@ class SettingsDialog(QDialog):
         section('Teleport')
         option('teleportEnabled', 'Enable teleport',
                'When disabled, the physics delta hook (hook_e) and invulnerability hook (hook_c) '
-               'are not injected. Useful to avoid conflicts with other mods. Requires restart.')
+               'are not injected into the game. Useful to avoid conflicts with other mods.\n\n'
+               'Requires restarting both the overlay AND the game to take effect.')
         center_y_row = QHBoxLayout()
         center_y_row.setSpacing(10)
         center_y_lbl = QLabel('Center TP Y')
