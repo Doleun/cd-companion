@@ -66,6 +66,8 @@ jobs:
           description: ${{ steps.meta.outputs.notes }}
           file_category: main
           archive_existing_file: true
+          primary_mod_manager_download: true
+          allow_mod_manager_download: true
 
       - name: Upload source zip to NexusMods
         uses: Nexus-Mods/upload-action@v1.0.0-beta.5
