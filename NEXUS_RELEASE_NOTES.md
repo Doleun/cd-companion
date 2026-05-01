@@ -1,1 +1,1 @@
-Fixed map marker and camera heading not updating after companion restart without restarting the game. If still broken after updating, delete %LOCALAPPDATA%\CD_Teleport\cd_hook_offsets.json and restart both.
+Fixed off-screen map marker indicator hugging the overlay border. Round window now forces correct 1:1 aspect ratio on startup. Window size is saved immediately after resizing.

@@ -135,6 +135,8 @@ class OverlayWindow(QMainWindow):
 
         w   = cfg.get('width',  DEFAULT_W)
         h   = cfg.get('height', DEFAULT_H)
+        if cfg.get('roundWindow', SETTING_DEFAULTS.get('roundWindow', False)):
+            h = w
         url = cfg.get('url', DEFAULT_URL)
 
         # Tenta posicionar no canto esquerdo da janela do jogo, centralizado
@@ -215,6 +217,12 @@ class OverlayWindow(QMainWindow):
         self._hover_timer.timeout.connect(self._check_bar_hover)
         self._hover_timer.start()
 
+        # ── Timer de debounce para salvar tamanho ao redimensionar ─────
+        self._resize_save_timer = QTimer(self)
+        self._resize_save_timer.setSingleShot(True)
+        self._resize_save_timer.setInterval(500)
+        self._resize_save_timer.timeout.connect(self._save_size)
+
         # ── Timer de follow da janela do jogo ──────────────────────────
         self._follow_timer = QTimer(self)
         self._follow_timer.setInterval(32)
@@ -250,6 +258,15 @@ class OverlayWindow(QMainWindow):
         self._apply_mask()
         self._update_bar_geometry()
         self._update_float_btn_geometry()
+        if hasattr(self, '_resize_save_timer'):
+            self._resize_save_timer.start()
+
+    def _save_size(self):
+        cfg = load_config()
+        w = self.width()
+        cfg['width']  = w
+        cfg['height'] = w if self._round_window else self.height()
+        save_config(cfg)
 
     # ── Barra: geometria e zonas de hover ─────────────────────────────
     _BAR_SHOW_ZONE = TitleBar.HEIGHT
@@ -499,9 +516,10 @@ class OverlayWindow(QMainWindow):
 
     def closeEvent(self, event):
         cfg = load_config()
+        w = self.width()
         cfg.update({
-            'width':  self.width(),
-            'height': self.height(),
+            'width':  w,
+            'height': w if self._round_window else self.height(),
             'x':      self.x(),
             'y':      self.y(),
             'url':    self._view.url().toString(),
