@@ -65,7 +65,7 @@ jobs:
           display_name: CD_Companion ${{ steps.meta.outputs.version }}
           description: ${{ steps.meta.outputs.notes }}
           file_category: main
-          archive_existing_file: true
+          archive_existing_file: false
           primary_mod_manager_download: true
           allow_mod_manager_download: true
 

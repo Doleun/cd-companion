@@ -1,4 +1,4 @@
-## v0.03.04
+## v0.03.05
 
 ### Internal
-- Test NexusMods release notes integration
+- Test NexusMods workflow
