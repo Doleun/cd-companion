@@ -443,7 +443,10 @@ async def _handle_client(websocket):
 
 async def _broadcast_status(status: str):
     """Envia status do engine para todos os clientes."""
-    await _broadcast_all(json.dumps({"type": "engine_status", "status": status}))
+    payload = {"type": "engine_status", "status": status}
+    if _engine:
+        payload["teleportEnabled"] = _engine.teleport_enabled
+    await _broadcast_all(json.dumps(payload))
 
 # ── Hotkey polling thread ────────────────────────────────────────────
 
@@ -543,7 +546,10 @@ async def _hotkey_abort():
 
 async def _broadcast_loop():
     global _engine, _last_pos
-    _engine = TeleportEngine()
+    teleport_enabled = os.environ.get('CD_TELEPORT_ENABLED', '1') != '0'
+    _engine = TeleportEngine(teleport_enabled=teleport_enabled)
+    if not teleport_enabled:
+        log.info("Teleport DISABLED — hooks hook_e and hook_c will not be injected")
     _last_broadcast_time: float = 0.0
     _was_attached = False
 

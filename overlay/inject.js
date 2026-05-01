@@ -36,6 +36,7 @@
   let waypointFilter  = '';
   let calibrationMode = false;
   let hasPreTeleport  = false;
+  let teleportEnabled = !(window.__cdSettings && window.__cdSettings.teleportEnabled === false);
 
   document.addEventListener('keydown', (e) => { if (e.key === 'Shift') shiftHeld = true;  });
   document.addEventListener('keyup',   (e) => { if (e.key === 'Shift') shiftHeld = false; });
@@ -134,6 +135,7 @@
   function showMapMarkerPopup(anchorEl) {
     let popup = document.getElementById('cdMapMarkerPopup');
     if (popup) { popup.remove(); return; }
+    if (!teleportEnabled) return;
     popup = document.createElement('div');
     popup.id = 'cdMapMarkerPopup';
     const rect = anchorEl.getBoundingClientRect();
@@ -399,7 +401,7 @@
     el.innerHTML = `
       <div id="cdOvCoords" style="font:11px/1.5 Consolas,monospace;color:#bbb;margin-bottom:2px">--</div>
       <div id="cdOvStatus" style="font-size:10px;color:#e07070">Connecting…</div>
-      <div style="display:flex;gap:4px;margin-top:5px">
+      <div id="cdOvTeleportRow" style="display:flex;gap:4px;margin-top:5px${teleportEnabled ? '' : ';display:none'}">
         <button id="cdOvMarker" title="Teleport to in-game map marker"
           style="flex:1;background:rgba(100,160,255,.15);border:1px solid rgba(100,160,255,.4);
           color:#80b4ff;font:10px 'Segoe UI';padding:3px 5px;border-radius:4px;cursor:pointer">
@@ -1267,6 +1269,25 @@
   window.__cdApplySettings = applySettings;
   applySettings(window.__cdSettings || {});
 
+  // ── Teleport visibility (reage a mudanças em tempo real) ──────────
+  function updateTeleportVisibility() {
+    teleportEnabled = !(window.__cdSettings && window.__cdSettings.teleportEnabled === false);
+    const display = teleportEnabled ? '' : 'none';
+    const wpBtn = document.getElementById('cdWpToggle');
+    const ctBtn = document.getElementById('cdCenterTp');
+    const wpPanel = document.getElementById('cdWpPanel');
+    const ctPanel = document.getElementById('cdCenterTpPanel');
+    const tpRow = document.getElementById('cdOvTeleportRow');
+    if (wpBtn) wpBtn.style.display = display;
+    if (ctBtn) ctBtn.style.display = display;
+    if (tpRow) tpRow.style.display = teleportEnabled ? 'flex' : 'none';
+    if (!teleportEnabled) {
+      if (wpPanel) wpPanel.style.display = 'none';
+      if (ctPanel) ctPanel.style.display = 'none';
+    }
+  }
+  window.__cdUpdateTeleportVisibility = updateTeleportVisibility;
+
   createCenterCrosshair();
   ensureStatusToggleBtn();
   updatePanel();
@@ -1277,6 +1298,7 @@
   // ambos os painéis começam ocultos
   ensureWaypointPanel();
   renderWaypoints();
+  updateTeleportVisibility();
   connect();
   setInterval(() => {
     if (window.mapManager && typeof window.mapManager.updateFoundLocationsStyle === 'function')
