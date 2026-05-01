@@ -43,11 +43,15 @@ jobs:
             dist/CD_Companion_source_${{ github.ref_name }}.zip
           body_path: CHANGELOG.md
 
-      - name: Read release notes
-        id: notes
+      - name: Prepare release metadata
+        id: meta
         run: |
+          $raw = "${{ github.ref_name }}" -replace '^v', ''
+          $parts = $raw -split '\.' | ForEach-Object { [int]$_ }
+          $ver = $parts -join '.'
+          "version=$ver" >> $env:GITHUB_OUTPUT
           $content = Get-Content -Path NEXUS_RELEASE_NOTES.md -Raw
-          "body<<EOF" >> $env:GITHUB_OUTPUT
+          "notes<<EOF" >> $env:GITHUB_OUTPUT
           $content >> $env:GITHUB_OUTPUT
           "EOF" >> $env:GITHUB_OUTPUT
 
@@ -57,11 +61,12 @@ jobs:
           api_key: ${{ secrets.NEXUSMODS_API_KEY }}
           file_group_id: ${{ secrets.NEXUSMODS_FILE_GROUP_ID_EXE }}
           filename: dist/CD_Companion.exe
-          version: ${{ github.ref_name }}
-          display_name: CD_Companion ${{ github.ref_name }}
-          description: ${{ steps.notes.outputs.body }}
+          version: ${{ steps.meta.outputs.version }}
+          display_name: CD_Companion ${{ steps.meta.outputs.version }}
+          description: ${{ steps.meta.outputs.notes }}
           file_category: main
           archive_existing_file: true
+          primary_mod_manager_download: true
 
       - name: Upload source zip to NexusMods
         uses: Nexus-Mods/upload-action@v1.0.0-beta.5
@@ -69,8 +74,8 @@ jobs:
           api_key: ${{ secrets.NEXUSMODS_API_KEY }}
           file_group_id: ${{ secrets.NEXUSMODS_FILE_GROUP_ID_SOURCE }}
           filename: dist/CD_Companion_source_${{ github.ref_name }}.zip
-          version: ${{ github.ref_name }}
-          display_name: CD_Companion source ${{ github.ref_name }}
-          description: ${{ steps.notes.outputs.body }}
+          version: ${{ steps.meta.outputs.version }}
+          display_name: CD_Companion source ${{ steps.meta.outputs.version }}
+          description: ${{ steps.meta.outputs.notes }}
           file_category: main
           archive_existing_file: true
