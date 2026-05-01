@@ -30,8 +30,37 @@ jobs:
       - name: Build executable
         run: pyinstaller CD_Companion.spec
 
+      - name: Package source zip
+        run: Compress-Archive -Path * -DestinationPath dist/CD_Companion_source_${{ github.ref_name }}.zip -Force
+
       - name: Upload Release Asset
         uses: softprops/action-gh-release@v2
         with:
-          files: dist/CD_Companion.exe
+          files: |
+            dist/CD_Companion.exe
+            dist/CD_Companion_source_${{ github.ref_name }}.zip
           body_path: CHANGELOG.md
+
+      - name: Upload exe to NexusMods
+        uses: Nexus-Mods/upload-action@v1
+        with:
+          api_key: ${{ secrets.NEXUSMODS_API_KEY }}
+          file_group_id: ${{ secrets.NEXUSMODS_FILE_GROUP_ID_EXE }}
+          filename: dist/CD_Companion.exe
+          version: ${{ github.ref_name }}
+          display_name: CD_Companion ${{ github.ref_name }}
+          description: ${{ github.event.release.body }}
+          file_category: main
+          archive_existing_file: true
+
+      - name: Upload source zip to NexusMods
+        uses: Nexus-Mods/upload-action@v1
+        with:
+          api_key: ${{ secrets.NEXUSMODS_API_KEY }}
+          file_group_id: ${{ secrets.NEXUSMODS_FILE_GROUP_ID_SOURCE }}
+          filename: dist/CD_Companion_source_${{ github.ref_name }}.zip
+          version: ${{ github.ref_name }}
+          display_name: CD_Companion source ${{ github.ref_name }}
+          description: ${{ github.event.release.body }}
+          file_category: main
+          archive_existing_file: true
