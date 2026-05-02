@@ -4,10 +4,13 @@ Contém: SettingsDialog, _PopupWebWindow, _InterceptPage, _LoginPrompt,
          HotkeySignals, TitleBar.
 """
 
-from PyQt5.QtCore import Qt, pyqtSignal, QObject
-from PyQt5.QtWidgets import (QDialog, QVBoxLayout, QHBoxLayout,
+import ctypes
+
+from PyQt5.QtCore import Qt, QPoint, QTimer, pyqtSignal, QObject
+from PyQt5.QtGui import QKeySequence
+from PyQt5.QtWidgets import (QApplication, QDialog, QVBoxLayout, QHBoxLayout,
                              QLabel, QCheckBox, QPushButton, QSlider,
-                             QMainWindow, QWidget)
+                             QMainWindow, QShortcut, QWidget)
 from PyQt5.QtWebEngineWidgets import QWebEngineView, QWebEnginePage
 
 # Importa SETTING_DEFAULTS do módulo de configuração
@@ -192,6 +195,8 @@ class SettingsDialog(QDialog):
 # ── Janelas WebEngine auxiliares ─────────────────────────────────────
 
 class PopupWebWindow(QMainWindow):
+    closed_with_pos = pyqtSignal(object)  # emits QPoint when window closes
+
     def __init__(self, parent=None, title='CD Overlay'):
         super().__init__(parent)
         self.setWindowTitle(title)
@@ -202,6 +207,11 @@ class PopupWebWindow(QMainWindow):
         self._page = QWebEnginePage(self._view)
         self._view.setPage(self._page)
         self.setCentralWidget(self._view)
+        QShortcut(QKeySequence(Qt.Key_Escape), self, self.close)
+
+    def closeEvent(self, event):
+        self.closed_with_pos.emit(self.pos())
+        super().closeEvent(event)
 
     def page(self):
         return self._page
@@ -213,22 +223,96 @@ class InterceptPage(QWebEnginePage):
     def __init__(self, parent=None):
         super().__init__(parent)
         self._popup_windows = []
+        self._last_popup_pos = None   # persists popup position within the session
 
     def createWindow(self, window_type):
-        parent = self.view().window() if self.view() else None
-        popup = PopupWebWindow(parent, 'CD Waypoints')
+        overlay = self.view().window() if self.view() else None
+        popup = PopupWebWindow(overlay, 'CD Overlay')
         self._popup_windows.append(popup)
         popup.destroyed.connect(lambda _=None, p=popup: self._forget_popup(p))
+        popup.closed_with_pos.connect(lambda pos: setattr(self, '_last_popup_pos', pos))
+        popup._page.windowCloseRequested.connect(popup.close)
         popup.show()
-        popup.raise_()
+        QTimer.singleShot(0, lambda: self._activate_popup(popup, overlay))
         return popup.page()
+
+    def _activate_popup(self, popup, overlay):
+        if not popup or not popup.isVisible():
+            return
+        self._position_popup(popup, overlay)
+        popup.raise_()
+        hwnd = int(popup.winId())
+        fg_hwnd = ctypes.windll.user32.GetForegroundWindow()
+        fg_tid = ctypes.windll.user32.GetWindowThreadProcessId(fg_hwnd, None)
+        my_tid = ctypes.windll.kernel32.GetCurrentThreadId()
+        if fg_tid and fg_tid != my_tid:
+            ctypes.windll.user32.AttachThreadInput(fg_tid, my_tid, True)
+            ctypes.windll.user32.SetForegroundWindow(hwnd)
+            ctypes.windll.user32.AttachThreadInput(fg_tid, my_tid, False)
+        else:
+            ctypes.windll.user32.SetForegroundWindow(hwnd)
+        popup._view.setFocus()
+
+    def _position_popup(self, popup, overlay):
+        # If user already moved the popup this session, reuse that position
+        if self._last_popup_pos is not None:
+            popup.move(self._last_popup_pos)
+            return
+
+        if overlay is None:
+            return
+
+        screen = QApplication.screenAt(overlay.geometry().center())
+        if screen is None:
+            screen = QApplication.primaryScreen()
+        if screen is None:
+            return
+
+        sg = screen.availableGeometry()
+        pw, ph = popup.width(), popup.height()
+        ox, oy = overlay.x(), overlay.y()
+        ow, oh = overlay.width(), overlay.height()
+        margin = 8
+
+        sr = sg.x() + sg.width()   # screen right
+        sb = sg.y() + sg.height()  # screen bottom
+
+        def cy(y):  # clamp y inside screen
+            return max(sg.y(), min(y, sb - ph))
+
+        def cx(x):  # clamp x inside screen
+            return max(sg.x(), min(x, sr - pw))
+
+        # Right of overlay
+        if ox + ow + margin + pw <= sr:
+            popup.move(QPoint(ox + ow + margin, cy(oy)))
+            return
+        # Left of overlay
+        if ox - margin - pw >= sg.x():
+            popup.move(QPoint(ox - margin - pw, cy(oy)))
+            return
+        # Below overlay
+        if oy + oh + margin + ph <= sb:
+            popup.move(QPoint(cx(ox), oy + oh + margin))
+            return
+        # Above overlay
+        if oy - margin - ph >= sg.y():
+            popup.move(QPoint(cx(ox), oy - margin - ph))
+            return
+
+        # No space on any side — use the screen corner nearest the overlay
+        ocx = ox + ow // 2
+        ocy = oy + oh // 2
+        x = sr - pw if ocx > sg.x() + sg.width() // 2 else sg.x()
+        y = sb - ph if ocy > sg.y() + sg.height() // 2 else sg.y()
+        popup.move(QPoint(x, y))
 
     def _forget_popup(self, popup):
         try:
             self._popup_windows.remove(popup)
         except ValueError:
             pass
-        self.runJavaScript('waypointPopup = null;')
+        self.runJavaScript('waypointPopup = null; nearbyPopup = null;')
 
     def acceptNavigationRequest(self, url, nav_type, is_main_frame):
         if url.scheme() == 'cdcompanion' and url.host() == 'login-needed':

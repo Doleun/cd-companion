@@ -115,12 +115,14 @@ HOTKEY_SETTINGS_FILE = os.path.join(SAVE_DIR, "cd_hotkeys.json")
 DEFAULT_HOTKEYS = {
     "teleport_marker": {"vk": 0x74, "mod": 0,    "enabled": True},   # F5
     "abort":           {"vk": 0x74, "mod": 0x10,  "enabled": True},   # Shift+F5
+    "open_nearby":     {"vk": 0x4E, "mod": 0x10,  "enabled": True},   # Shift+N
 }
 
 # Windows virtual key codes
 VK_NAMES = {
     0x70: "F1", 0x71: "F2", 0x72: "F3", 0x73: "F4", 0x74: "F5", 0x75: "F6",
     0x76: "F7", 0x77: "F8", 0x78: "F9", 0x79: "F10", 0x7A: "F11", 0x7B: "F12",
+    0x4E: "N",
 }
 VK_MOD_SHIFT = 0x10
 VK_MOD_CTRL  = 0x11
@@ -503,6 +505,9 @@ def _hotkey_thread():
                     elif hk_id == "abort":
                         _hotkey_loop.call_soon_threadsafe(
                             asyncio.ensure_future, _hotkey_abort())
+                    elif hk_id == "open_nearby":
+                        _hotkey_loop.call_soon_threadsafe(
+                            asyncio.ensure_future, _hotkey_open_nearby())
 
             key_state[hk_id] = pressed
 
@@ -543,6 +548,10 @@ async def _hotkey_abort():
         loop.call_later(INVULN_SECONDS, _engine.set_invuln, False)
     log.info("Hotkey abort → (%.1f, %.1f, %.1f) — %s", ax, ay, az, 'ok' if ok else err)
     _pre_teleport_pos = None
+
+async def _hotkey_open_nearby():
+    """Abre o popup de localizações próximas no overlay (hotkey)."""
+    await _broadcast_all(json.dumps({"type": "open_nearby"}))
 
 async def _broadcast_loop():
     global _engine, _last_pos
