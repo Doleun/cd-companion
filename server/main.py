@@ -425,11 +425,13 @@ async def _handle_client(websocket):
             elif action == "location_toggle":
                 location_id = cmd.get("locationId")
                 found = cmd.get("found")
+                source_client_id = cmd.get("sourceClientId")
                 if location_id is not None and found is not None:
                     bcast = json.dumps({
                         "type": "location_toggle",
                         "locationId": str(location_id),
                         "found": bool(found),
+                        "sourceClientId": source_client_id,
                     })
                     for client in set(_clients):
                         if client is not websocket:

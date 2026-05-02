@@ -16,6 +16,9 @@
   const WS_URL = '$WS_URL';
   const RECONNECT_MS = 3000;
   const CENTER_TELEPORT_Y_KEY = 'cd_center_teleport_y';
+  const CLIENT_ID = (window.crypto && typeof window.crypto.randomUUID === 'function')
+    ? window.crypto.randomUUID()
+    : `overlay-${Date.now()}-${Math.random().toString(16).slice(2)}`;
 
   let ws              = null;
   let marker          = null;
@@ -529,7 +532,11 @@
   }
 
   function sendCmd(obj) {
-    if (ws && ws.readyState === 1) ws.send(JSON.stringify(obj));
+    if (!ws || ws.readyState !== 1) return;
+    const payload = obj && obj.cmd === 'location_toggle'
+      ? { ...obj, sourceClientId: CLIENT_ID }
+      : obj;
+    ws.send(JSON.stringify(payload));
   }
 
   function syncCenterTeleportInputs() {
@@ -573,6 +580,13 @@
 
   // ── MapGenie location sync ────────────────────────────────────────
   let _replayingToggle = false;
+  function setUserLocationFound(locationId, found) {
+    if (!window.user?.locations) return;
+    const id = String(locationId);
+    if (found) window.user.locations[id] = true;
+    else delete window.user.locations[id];
+  }
+
   (function () {
     // ── Fetch patch ──
     const _origFetch = window.fetch;
@@ -589,10 +603,7 @@
             const locationId = parts[1].split('/')[0].split('?')[0];
             if (locationId) {
               sendCmd({ cmd: 'location_toggle', locationId, found: method === 'PUT' });
-              if (window.user?.locations) {
-                if (method === 'PUT') window.user.locations[locationId] = true;
-                else delete window.user.locations[locationId];
-              }
+              setUserLocationFound(locationId, method === 'PUT');
             }
           }
         } catch (_) {}
@@ -618,10 +629,7 @@
           const locationId = parts[1].split('/')[0].split('?')[0];
           if (locationId) {
             sendCmd({ cmd: 'location_toggle', locationId, found: xhr._cdMethod === 'PUT' });
-            if (window.user?.locations) {
-              if (xhr._cdMethod === 'PUT') window.user.locations[locationId] = true;
-              else delete window.user.locations[locationId];
-            }
+            setUserLocationFound(locationId, xhr._cdMethod === 'PUT');
           }
         }
       });
@@ -652,6 +660,7 @@
 
   function _onLocationToggle(locationId, found) {
     _showLocationToast(locationId, found);
+    setUserLocationFound(locationId, found);
     if (typeof window.mapManager?.markLocationAsFound === 'function') {
       _replayingToggle = true;
       window.mapManager.markLocationAsFound(parseInt(locationId, 10), found);
@@ -663,6 +672,7 @@
   // Threshold em coordenadas lng/lat do Mapbox — ajustar conforme necessário.
   // O mapa usa valores aprox. entre -1 e 1; 0.005 equivale a uma área pequena.
   const NEARBY_THRESHOLD = (window.__cdSettings && window.__cdSettings.nearbyThreshold) || 0.005;
+  const NEARBY_REFRESH_MS = 500;
 
   function getNearbyLocations() {
     if (!lastPos || !map) return [];
@@ -706,7 +716,7 @@
       return;
     }
 
-    const items = getNearbyLocations();
+    let items = getNearbyLocations();
 
     nearbyPopup = window.open('', 'cdNearbyLocations',
       'width=320,height=460,resizable=yes,scrollbars=no');
@@ -800,10 +810,25 @@
       });
     }
 
+    function refreshNearbyItems() {
+      const selectedId = items[selectedIndex]?.id || null;
+      items = getNearbyLocations();
+      if (selectedId) {
+        const nextIndex = items.findIndex(item => item.id === selectedId);
+        selectedIndex = nextIndex >= 0
+          ? nextIndex
+          : Math.min(selectedIndex, Math.max(items.length - 1, 0));
+      } else {
+        selectedIndex = Math.min(selectedIndex, Math.max(items.length - 1, 0));
+      }
+      render();
+    }
+
     function doToggle() {
       if (!items.length) return;
       const item = items[selectedIndex];
       item.found = !item.found;
+      setUserLocationFound(item.id, item.found);
       // Delega ao mapManager: atualiza UI, faz o fetch interno e o nosso patch intercepta
       // (sem _replayingToggle = true, então o broadcast é disparado normalmente)
       if (typeof window.mapManager?.markLocationAsFound === 'function') {
@@ -835,6 +860,13 @@
 
     // Listener apenas no window do popup — doc.addEventListener dispara em duplicata
     nearbyPopup.addEventListener('keydown', keyHandler);
+    const refreshTimer = setInterval(() => {
+      if (!nearbyPopup) {
+        clearInterval(refreshTimer);
+        return;
+      }
+      refreshNearbyItems();
+    }, NEARBY_REFRESH_MS);
 
     render();
     // Delay para Qt processar a criação da janela antes de focar
@@ -897,6 +929,7 @@
             setStatus(`Calibration: ${msg.count} point(s) saved`, '#60e890', 3000);
           }
         } else if (msg.type === 'location_toggle') {
+          if (msg.sourceClientId && msg.sourceClientId === CLIENT_ID) return;
           _onLocationToggle(msg.locationId, msg.found);
 
         } else if (msg.type === 'open_nearby') {
