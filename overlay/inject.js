@@ -881,33 +881,71 @@
         return;
       }
       if (hcount) hcount.textContent = `${items.length} location${items.length !== 1 ? 's' : ''}`;
-      list.innerHTML = items.map((item, i) => {
+
+      // Fingerprint: skip render se ids, found e seleção não mudaram
+      const fp = items.map(it => `${it.id}:${it.found}`).join(',') + '|' + selectedIndex;
+      if (fp === list._fp) {
+        // Só atualiza distâncias (mudam sem alterar a estrutura)
+        items.forEach((item, i) => {
+          const el = list.querySelector(`.item[data-id="${item.id}"]`);
+          if (el) { const d = el.querySelector('.item-dist'); if (d) d.textContent = (item.dist * 1000).toFixed(1); }
+        });
+        return;
+      }
+      list._fp = fp;
+
+      // Keyed update: atualiza elementos existentes, cria novos, remove obsoletos
+      const existing = {};
+      list.querySelectorAll('.item[data-id]').forEach(el => { existing[el.dataset.id] = el; });
+      const newIds = new Set(items.map(it => it.id));
+      Object.keys(existing).forEach(id => { if (!newIds.has(id)) existing[id].remove(); });
+
+      function buildItemEl(item, i) {
         const cls = item.found ? 'found' : 'notfound';
         const sel = i === selectedIndex ? ' selected' : '';
-        const distStr = (item.dist * 1000).toFixed(1);
         const cat = item.category;
         const badge = `<span class="item-badge">${item.found ? '✓' : '○'}</span>`;
         const iconHtml = cat?.icon
-          ? `<div class="item-icon-wrap"><span class="icon icon-${cat.icon}"></span>${badge}</div>`
-          : '';
-        const catHtml  = cat ? `<div class="item-cat">${cat.title}</div>` : '';
-        return `<div class="item ${cls}${sel}" data-idx="${i}">
+          ? `<div class="item-icon-wrap"><span class="icon icon-${cat.icon}"></span>${badge}</div>` : '';
+        const catHtml = cat ? `<div class="item-cat">${cat.title}</div>` : '';
+        const el = doc.createElement('div');
+        el.className = `item ${cls}${sel}`;
+        el.dataset.id = item.id;
+        el.innerHTML = `
           ${iconHtml || `<div class="check">${item.found ? '✓' : '○'}</div>`}
           <div class="item-name">
             <div class="item-title" title="${item.title}">${item.title}</div>
             ${catHtml}
           </div>
-          <div class="item-dist">${distStr}</div>
-        </div>`;
-      }).join('');
-      const sel = list.querySelector('.selected');
-      if (sel) sel.scrollIntoView({ block: 'nearest' });
-      list.querySelectorAll('.item').forEach(el => {
+          <div class="item-dist">${(item.dist * 1000).toFixed(1)}</div>`;
         el.addEventListener('click', () => {
-          selectedIndex = +el.dataset.idx;
+          selectedIndex = items.findIndex(it => it.id === item.id);
           doToggle();
         });
+        return el;
+      }
+
+      items.forEach((item, i) => {
+        const cls = item.found ? 'found' : 'notfound';
+        const sel = i === selectedIndex ? ' selected' : '';
+        let el = existing[item.id];
+        if (!el) {
+          el = buildItemEl(item, i);
+        } else {
+          // Atualiza classe e conteúdo dinâmico sem recriar o elemento
+          el.className = `item ${cls}${sel}`;
+          const badge = el.querySelector('.item-badge');
+          if (badge) badge.textContent = item.found ? '✓' : '○';
+          const check = el.querySelector('.check');
+          if (check) check.textContent = item.found ? '✓' : '○';
+          const d = el.querySelector('.item-dist');
+          if (d) d.textContent = (item.dist * 1000).toFixed(1);
+        }
+        list.appendChild(el); // move para posição correta (ordem por distância)
       });
+
+      const selEl = list.querySelector('.selected');
+      if (selEl) selEl.scrollIntoView({ block: 'nearest' });
     }
 
     function refreshNearbyItems() {
