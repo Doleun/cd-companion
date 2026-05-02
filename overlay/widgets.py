@@ -190,9 +190,9 @@ class SettingsDialog(QDialog):
 
         section('Nearby')
         option('nearbyControlsEnabled', 'Enable nearby popup shortcuts',
-               'Shift+N or LB+A opens the nearby popup. In the popup: Up/Down or D-pad moves, '
-               'Enter or A toggles found, Esc or B closes.')
-        nearby_help = QLabel('Shortcuts: Shift+N / LB+A open. Up/Down or D-pad navigate. Enter/A toggles. Esc/B closes.')
+               'Shift+N or LB+A opens the nearby popup. In the popup: Up/Down, W/S, or D-pad moves, '
+               'Enter, Space, or A toggles found, Esc or B closes.')
+        nearby_help = QLabel('Shortcuts: Shift+N / LB+A open. Up/Down, W/S, or D-pad navigate. Enter/Space/A toggles. Esc/B closes.')
         nearby_help.setWordWrap(True)
         nearby_help.setStyleSheet('color:#7c8db5; font:11px "Segoe UI"; margin-left:26px;')
         layout.addWidget(nearby_help)
@@ -296,14 +296,14 @@ class InterceptPage(QWebEnginePage):
         popup.destroyed.connect(lambda _=None, p=popup: self._forget_popup(p))
         popup.closed_with_pos.connect(lambda pos: setattr(self, '_last_popup_pos', pos))
         popup._page.windowCloseRequested.connect(popup.close)
+        self._position_popup(popup, overlay)
         popup.show()
-        QTimer.singleShot(0, lambda: self._activate_popup(popup, overlay))
+        QTimer.singleShot(0, lambda: self._activate_popup(popup))
         return popup.page()
 
-    def _activate_popup(self, popup, overlay):
+    def _activate_popup(self, popup):
         if not popup or not popup.isVisible():
             return
-        self._position_popup(popup, overlay)
         popup.raise_()
         hwnd = int(popup.winId())
         fg_hwnd = ctypes.windll.user32.GetForegroundWindow()

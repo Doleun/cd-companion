@@ -687,6 +687,14 @@
     try { if (popup && !popup.closed) popup.close(); } catch (_) {}
   };
 
+  function isNearbyPopupOpen() {
+    try {
+      return !!(nearbyPopup && !nearbyPopup.closed);
+    } catch (_) {
+      return false;
+    }
+  }
+
   function getNearbyLocations() {
     if (!lastPos || !map) return [];
     try {
@@ -724,10 +732,12 @@
 
   function openNearbyPopup() {
     if (!nearbyControlsEnabled()) return;
-    if (nearbyPopup) {
+    if (isNearbyPopupOpen()) {
       closeNearbyPopup();
       return;
     }
+    nearbyPopup = null;
+    nearbyInputHandler = null;
 
     let items = getNearbyLocations();
 
@@ -876,15 +886,15 @@
         closeNearbyPopup();
         return;
       }
-      if (e.key === 'ArrowDown') {
+      if (e.key === 'ArrowDown' || e.key.toLowerCase() === 's') {
         e.preventDefault();
         selectedIndex = Math.min(selectedIndex + 1, items.length - 1);
         render();
-      } else if (e.key === 'ArrowUp') {
+      } else if (e.key === 'ArrowUp' || e.key.toLowerCase() === 'w') {
         e.preventDefault();
         selectedIndex = Math.max(selectedIndex - 1, 0);
         render();
-      } else if (e.key === 'Enter') {
+      } else if (e.key === 'Enter' || e.key === ' ') {
         e.preventDefault();
         doToggle();
       }
@@ -893,7 +903,9 @@
     // Listener apenas no window do popup — doc.addEventListener dispara em duplicata
     nearbyPopup.addEventListener('keydown', keyHandler);
     const refreshTimer = setInterval(() => {
-      if (!nearbyPopup) {
+      if (!isNearbyPopupOpen()) {
+        nearbyPopup = null;
+        nearbyInputHandler = null;
         clearInterval(refreshTimer);
         return;
       }
