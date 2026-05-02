@@ -312,7 +312,7 @@ class InterceptPage(QWebEnginePage):
             self._popup_windows.remove(popup)
         except ValueError:
             pass
-        self.runJavaScript('waypointPopup = null; nearbyPopup = null;')
+        self.runJavaScript('waypointPopup = null; nearbyPopup = null; nearbyInputHandler = null;')
 
     def acceptNavigationRequest(self, url, nav_type, is_main_frame):
         if url.scheme() == 'cdcompanion' and url.host() == 'login-needed':

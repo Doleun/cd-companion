@@ -129,6 +129,58 @@ VK_MOD_CTRL  = 0x11
 VK_MOD_ALT   = 0x12
 MOD_NAMES = {VK_MOD_CTRL: "Ctrl", VK_MOD_ALT: "Alt", VK_MOD_SHIFT: "Shift"}
 
+XINPUT_GAMEPAD_DPAD_UP = 0x0001
+XINPUT_GAMEPAD_DPAD_DOWN = 0x0002
+XINPUT_GAMEPAD_LEFT_SHOULDER = 0x0100
+XINPUT_GAMEPAD_A = 0x1000
+XINPUT_GAMEPAD_B = 0x2000
+XINPUT_OPEN_NEARBY_MASK = XINPUT_GAMEPAD_LEFT_SHOULDER | XINPUT_GAMEPAD_A
+XINPUT_NEARBY_INPUTS = {
+    XINPUT_GAMEPAD_DPAD_UP: "up",
+    XINPUT_GAMEPAD_DPAD_DOWN: "down",
+    XINPUT_GAMEPAD_A: "toggle",
+    XINPUT_GAMEPAD_B: "close",
+}
+
+class XINPUT_GAMEPAD(ctypes.Structure):
+    _fields_ = [
+        ("wButtons", ctypes.wintypes.WORD),
+        ("bLeftTrigger", ctypes.wintypes.BYTE),
+        ("bRightTrigger", ctypes.wintypes.BYTE),
+        ("sThumbLX", ctypes.wintypes.SHORT),
+        ("sThumbLY", ctypes.wintypes.SHORT),
+        ("sThumbRX", ctypes.wintypes.SHORT),
+        ("sThumbRY", ctypes.wintypes.SHORT),
+    ]
+
+class XINPUT_STATE(ctypes.Structure):
+    _fields_ = [
+        ("dwPacketNumber", ctypes.wintypes.DWORD),
+        ("Gamepad", XINPUT_GAMEPAD),
+    ]
+
+def _load_xinput_get_state():
+    for dll_name in ("xinput1_4.dll", "xinput1_3.dll", "xinput9_1_0.dll"):
+        try:
+            dll = ctypes.WinDLL(dll_name)
+            fn = dll.XInputGetState
+            fn.argtypes = [ctypes.wintypes.DWORD, ctypes.POINTER(XINPUT_STATE)]
+            fn.restype = ctypes.wintypes.DWORD
+            return fn
+        except Exception:
+            continue
+    return None
+
+def _controller_buttons(get_state):
+    if not get_state:
+        return 0
+    state = XINPUT_STATE()
+    buttons = 0
+    for idx in range(4):
+        if get_state(idx, ctypes.byref(state)) == 0:
+            buttons |= state.Gamepad.wButtons
+    return buttons
+
 def _load_hotkey_settings():
     try:
         with open(HOTKEY_SETTINGS_FILE, 'r', encoding='utf-8') as f:
@@ -460,8 +512,11 @@ def _hotkey_thread():
     """Thread que faz polling de hotkeys globais via GetAsyncKeyState."""
     import threading
     get_key = ctypes.windll.user32.GetAsyncKeyState
+    get_xinput_state = _load_xinput_get_state()
     hotkeys = _load_hotkey_settings()
     key_state = {}
+    controller_open_nearby_pressed = False
+    controller_button_state = {}
 
     def _display(hk):
         vk = hk["vk"]
@@ -475,11 +530,33 @@ def _hotkey_thread():
         if cfg["enabled"]:
             log.info("Hotkey: %s → %s", _display(cfg), hk_id)
 
+    if get_xinput_state:
+        log.info("Controller hotkey: LB+A -> open_nearby")
+
     while True:
         time.sleep(0.05)  # 50ms polling
 
         if not _engine or not _engine.attached or not _engine.hooks_installed:
             continue
+
+        controller_buttons = _controller_buttons(get_xinput_state)
+        controller_pressed = bool((controller_buttons & XINPUT_OPEN_NEARBY_MASK) == XINPUT_OPEN_NEARBY_MASK)
+        if controller_pressed and not controller_open_nearby_pressed and _hotkey_loop:
+            _hotkey_loop.call_soon_threadsafe(
+                asyncio.ensure_future, _hotkey_open_nearby())
+        controller_open_nearby_pressed = controller_pressed
+
+        for button_mask, action in XINPUT_NEARBY_INPUTS.items():
+            pressed = bool(controller_buttons & button_mask)
+            was_pressed = controller_button_state.get(button_mask, False)
+            controller_button_state[button_mask] = pressed
+            if not pressed or was_pressed:
+                continue
+            if button_mask == XINPUT_GAMEPAD_A and controller_buttons & XINPUT_GAMEPAD_LEFT_SHOULDER:
+                continue
+            if _hotkey_loop:
+                _hotkey_loop.call_soon_threadsafe(
+                    asyncio.ensure_future, _hotkey_nearby_input(action))
 
         for hk_id, cfg in hotkeys.items():
             if not cfg["enabled"]:
@@ -554,6 +631,10 @@ async def _hotkey_abort():
 async def _hotkey_open_nearby():
     """Abre o popup de localizações próximas no overlay (hotkey)."""
     await _broadcast_all(json.dumps({"type": "open_nearby"}))
+
+async def _hotkey_nearby_input(action: str):
+    """Envia comando de navegacao do controle para o popup nearby."""
+    await _broadcast_all(json.dumps({"type": "nearby_input", "action": action}))
 
 async def _broadcast_loop():
     global _engine, _last_pos

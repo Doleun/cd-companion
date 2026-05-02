@@ -37,6 +37,7 @@
   let waypoints       = [];
   let waypointPopup   = null;
   let nearbyPopup     = null;
+  let nearbyInputHandler = null;
   let waypointFilter  = '';
   let calibrationMode = false;
   let hasPreTeleport  = false;
@@ -711,8 +712,7 @@
 
   function openNearbyPopup() {
     if (nearbyPopup) {
-      try { nearbyPopup.close(); } catch (_) {}
-      nearbyPopup = null;
+      closeNearbyPopup();
       return;
     }
 
@@ -837,11 +837,30 @@
       render();
     }
 
+    function closeNearbyPopup() {
+      const popup = nearbyPopup;
+      nearbyPopup = null;
+      nearbyInputHandler = null;
+      if (popup) popup.close();
+    }
+
+    nearbyInputHandler = function(action) {
+      if (action === 'close') {
+        closeNearbyPopup();
+      } else if (action === 'down') {
+        selectedIndex = Math.min(selectedIndex + 1, items.length - 1);
+        render();
+      } else if (action === 'up') {
+        selectedIndex = Math.max(selectedIndex - 1, 0);
+        render();
+      } else if (action === 'toggle') {
+        doToggle();
+      }
+    };
+
     function keyHandler(e) {
       if (e.key === 'Escape') {
-        const popup = nearbyPopup;   // captura antes de zerar
-        nearbyPopup = null;
-        if (popup) popup.close();
+        closeNearbyPopup();
         return;
       }
       if (e.key === 'ArrowDown') {
@@ -934,6 +953,9 @@
 
         } else if (msg.type === 'open_nearby') {
           openNearbyPopup();
+
+        } else if (msg.type === 'nearby_input') {
+          if (nearbyInputHandler) nearbyInputHandler(msg.action);
 
         } else if (msg.type === 'map_marker') {
           mapDestLng = msg.lng;
