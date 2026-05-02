@@ -54,7 +54,6 @@ jobs:
           files: |
             dist/CD_Companion.zip
             dist/CD_Companion_source_${{ github.ref_name }}.zip
-          body_path: CHANGELOG.md
 
       - name: Prepare release metadata
         id: meta
