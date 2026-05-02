@@ -530,7 +530,6 @@
     const lng = loc?.longitude;
     const lat = loc?.latitude;
     if (typeof lng === 'number' && typeof lat === 'number') {
-      following = false;
       pan(lng, lat);
     }
   }
