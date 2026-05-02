@@ -534,7 +534,7 @@ def _hotkey_thread():
             log.info("Hotkey: %s → %s", _display(cfg), hk_id)
 
     if get_xinput_state:
-        log.info("Controller hotkey: LB+A -> open_nearby")
+        log.info("Controller hotkey: LB+Down -> open_nearby")
 
     while True:
         time.sleep(0.05)  # 50ms polling
