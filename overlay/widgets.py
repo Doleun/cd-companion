@@ -430,6 +430,8 @@ class InterceptPage(QWebEnginePage):
         popup.destroyed.connect(lambda _=None, p=popup: self._forget_popup(p))
         popup.closed_with_pos.connect(lambda pos: setattr(self, '_last_popup_pos', pos))
         popup._page.windowCloseRequested.connect(popup.close)
+        popup._page.geometryChangeRequested.connect(
+            lambda rect, p=popup: p.resize(rect.width(), rect.height()))
         self._position_popup(popup, overlay)
         popup.show()
         QTimer.singleShot(0, lambda: self._activate_popup(popup))

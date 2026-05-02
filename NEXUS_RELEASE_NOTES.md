@@ -1,1 +1,1 @@
-Nearby popup: category icons, found badge, sorted by distance. Scan radius circle on map. Configurable radius and hotkey in Settings. Scroll no longer resets on refresh.
+Nearby popup: icons, found badge, distance sort, details panel with image/description, location-link pan, scan radius circle, configurable radius/hotkey, smoother refresh.

@@ -525,6 +525,16 @@
     if (m) m.easeTo({ center: [lng, lat], duration: 50 });
   }
 
+  function panToLocationId(locationId) {
+    const loc = _getLocationDetails(locationId);
+    const lng = loc?.longitude;
+    const lat = loc?.latitude;
+    if (typeof lng === 'number' && typeof lat === 'number') {
+      following = false;
+      pan(lng, lat);
+    }
+  }
+
   function createCenterCrosshair() {
     if (document.getElementById('cdCenterCrosshair')) return;
     const el = document.createElement('div');
@@ -674,6 +684,7 @@
   // O mapa usa valores aprox. entre -1 e 1; 0.005 equivale a uma área pequena.
   const NEARBY_REFRESH_MS = 500;
   let _catCache = null;
+  let _locCache = null;
   function _getCategoryName(id) {
     if (!_catCache) {
       _catCache = {};
@@ -689,9 +700,43 @@
     const v = window.__cdSettings && window.__cdSettings.nearbyThreshold;
     return (typeof v === 'number' && v > 0) ? v : 0.005;
   }
+  function _getLocationDetails(id) {
+    try {
+      if (!_locCache) {
+        _locCache = {};
+        for (const item of window.mapData?.locations || []) _locCache[String(item.id)] = item;
+      }
+      return _locCache[String(id)] || null;
+    } catch (_) {
+      return null;
+    }
+  }
+  function _escapeHtml(value) {
+    return String(value ?? '').replace(/[&<>"']/g, ch => ({
+      '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
+    }[ch]));
+  }
+  function _renderInlineMarkdown(value) {
+    return _escapeHtml(value)
+      .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
+      .replace(/\[([^\]]+)\]\((https?:\/\/[^)\s]+)\)/g,
+        (_m, text, url) => {
+          const match = url.match(/[?&]locationIds=(\d+)/);
+          if (match) return `<a href="#" data-location-id="${match[1]}">${text}</a>`;
+          return `<a href="${url}" target="_blank" rel="noopener noreferrer">${text}</a>`;
+        });
+  }
+  function _renderDescription(value) {
+    if (!value) return '';
+    return String(value)
+      .split(/\n{2,}/)
+      .map(part => `<p>${_renderInlineMarkdown(part).replace(/\n/g, '<br>')}</p>`)
+      .join('');
+  }
   const _NR_SRC   = 'cd-nearby-radius';
   const _NR_FILL  = 'cd-nearby-radius-fill';
   const _NR_LINE  = 'cd-nearby-radius-line';
+  let _nearbyCircleKey = '';
 
   function _buildNearbyCircleGeoJSON(lng, lat) {
     const steps = 64;
@@ -708,6 +753,11 @@
     const m = getMap();
     if (!m) return;
     const show = nearbyControlsEnabled() && !!lastPos;
+    const circleKey = show
+      ? `${lastPos.lng.toFixed(5)},${lastPos.lat.toFixed(5)},${_nearbyThreshold()}`
+      : 'hidden';
+    if (circleKey === _nearbyCircleKey) return;
+    _nearbyCircleKey = circleKey;
     try {
       if (!m.getSource(_NR_SRC)) {
         if (!show) return;
@@ -757,13 +807,15 @@
           const [lng, lat] = f.geometry.coordinates;
           const dx = lng - lastPos.lng, dy = lat - lastPos.lat;
           const d2 = dx * dx + dy * dy;
+          const details = _getLocationDetails(f.properties.locationId);
+          const category = details?.category || _getCategoryName(f.properties.category_id);
           if (d2 <= t * t) acc.push({
             id: String(f.properties.locationId),
-            title: f.properties.title || `Location ${f.properties.locationId}`,
-            category: f.properties.category_id,
+            title: details?.title || f.properties.title || `Location ${f.properties.locationId}`,
             found: !!(window.user?.locations?.[f.properties.locationId]),
             dist: Math.sqrt(d2),
-            category: _getCategoryName(f.properties.category_id)
+            category,
+            details
           });
           return acc;
         }, [])
@@ -797,10 +849,12 @@
     let items = getNearbyLocations();
 
     nearbyPopup = window.open('', 'cdNearbyLocations',
-      'width=320,height=460,resizable=yes,scrollbars=no');
+      'width=680,height=460,resizable=yes,scrollbars=no');
     if (!nearbyPopup) return;
 
     let selectedIndex = 0;
+    let lastDetailsId = null;
+    let lastDetailsFound = null;
     const doc = nearbyPopup.document;
     const _iconCssHref = document.head.querySelector('link[href*="crimson-desert-icons"]')?.href || '';
     doc.open();
@@ -821,7 +875,21 @@
       display:flex;align-items:center;gap:8px;flex-shrink:0}
     .header-title{flex:1;font-size:13px;font-weight:600;color:#ffd060}
     .header-count{font-size:11px;color:#555}
-    .list{flex:1;overflow-y:auto;padding:4px}
+    .content{flex:1;min-height:0;display:flex}
+    .list{width:320px;flex-shrink:0;overflow-y:auto;padding:4px;border-right:1px solid rgba(255,255,255,.07)}
+    .details{flex:1;min-width:0;overflow-y:auto;background:rgba(8,8,12,.96)}
+    .details-empty{height:100%;display:flex;align-items:center;justify-content:center;color:#555;font-size:12px}
+    .detail-media{height:155px;background:#07070a;border-bottom:1px solid rgba(255,208,96,.25);display:flex;align-items:center;justify-content:center;overflow:hidden}
+    .detail-media img{width:100%;height:100%;object-fit:cover}
+    .detail-body{padding:12px}
+    .detail-title{font-size:20px;line-height:1.15;font-weight:700;color:#f4f0e8;margin:0 0 4px}
+    .detail-category{font-style:italic;color:#cfc4ad;font-size:12px;margin-bottom:14px}
+    .detail-desc{color:#eee;font-size:12px;line-height:1.55}
+    .detail-desc p{margin:0 0 10px}
+    .detail-desc strong{color:#fff}
+    .detail-desc a{color:#2fa7ff;text-decoration:none}
+    .detail-found{margin-top:12px;padding-top:10px;border-top:1px solid rgba(255,208,96,.25);display:flex;align-items:center;justify-content:center;gap:8px;text-transform:uppercase;font-weight:700;color:#ddd}
+    .detail-box{width:20px;height:20px;border:2px solid rgba(255,208,96,.45);display:flex;align-items:center;justify-content:center;color:#60e890}
     .empty{padding:24px;text-align:center;color:#555;font-size:12px}
     .item{display:flex;align-items:center;gap:8px;
       padding:6px 10px;border-radius:5px;cursor:pointer;
@@ -855,11 +923,14 @@
       <div class="header-title">📍 Nearby</div>
       <div class="header-count" id="hcount"></div>
     </div>
-    <div class="list" id="list"></div>
+    <div class="content">
+      <div class="list" id="list"></div>
+      <div class="details" id="details"></div>
+    </div>
     <div class="footer">
-      <span style="margin-right: 5px"><b>↑↓/W/A/up-pad/down-pad</b> Navigate</span>
-      <span style="margin-right: 5px"><b>Enter/A-pad</b> Mark</span>
-      <span><b>Esc/B-pad</b> Close</span>
+      <span style="margin-right: 5px"><b>Up/Down, W/S, D-pad</b> Navigate</span>
+      <span style="margin-right: 5px"><b>Enter, Space, A</b> Mark</span>
+      <span><b>Esc, B</b> Close</span>
     </div>
   </div>
   <script>
@@ -878,6 +949,7 @@
       if (items.length === 0) {
         list.innerHTML = '<div class="empty">No location nearby</div>';
         if (hcount) hcount.textContent = '';
+        renderDetails(null);
         return;
       }
       if (hcount) hcount.textContent = `${items.length} location${items.length !== 1 ? 's' : ''}`;
@@ -890,6 +962,7 @@
           const el = list.querySelector(`.item[data-id="${item.id}"]`);
           if (el) { const d = el.querySelector('.item-dist'); if (d) d.textContent = (item.dist * 1000).toFixed(1); }
         });
+        renderDetails(items[selectedIndex]);
         return;
       }
       list._fp = fp;
@@ -905,21 +978,23 @@
         const sel = i === selectedIndex ? ' selected' : '';
         const cat = item.category;
         const badge = `<span class="item-badge">${item.found ? '✓' : '○'}</span>`;
+        const iconName = String(cat?.icon || '').replace(/[^a-z0-9_-]/gi, '');
         const iconHtml = cat?.icon
-          ? `<div class="item-icon-wrap"><span class="icon icon-${cat.icon}"></span>${badge}</div>` : '';
-        const catHtml = cat ? `<div class="item-cat">${cat.title}</div>` : '';
+          ? `<div class="item-icon-wrap"><span class="icon icon-${iconName}"></span>${badge}</div>` : '';
+        const catHtml = cat ? `<div class="item-cat">${_escapeHtml(cat.title)}</div>` : '';
         const el = doc.createElement('div');
         el.className = `item ${cls}${sel}`;
         el.dataset.id = item.id;
         el.innerHTML = `
           ${iconHtml || `<div class="check">${item.found ? '✓' : '○'}</div>`}
           <div class="item-name">
-            <div class="item-title" title="${item.title}">${item.title}</div>
+            <div class="item-title" title="${_escapeHtml(item.title)}">${_escapeHtml(item.title)}</div>
             ${catHtml}
           </div>
           <div class="item-dist">${(item.dist * 1000).toFixed(1)}</div>`;
         el.addEventListener('click', () => {
           selectedIndex = items.findIndex(it => it.id === item.id);
+          render();
           doToggle();
         });
         return el;
@@ -946,6 +1021,41 @@
 
       const selEl = list.querySelector('.selected');
       if (selEl) selEl.scrollIntoView({ block: 'nearest' });
+      renderDetails(items[selectedIndex]);
+    }
+
+    function renderDetails(item) {
+      const detailEl = doc.getElementById('details');
+      if (!detailEl) return;
+      if (!item) {
+        lastDetailsId = null;
+        lastDetailsFound = null;
+        detailEl.innerHTML = '<div class="details-empty">Select a nearby location</div>';
+        return;
+      }
+      if (lastDetailsId === item.id && lastDetailsFound === item.found) return;
+      lastDetailsId = item.id;
+      lastDetailsFound = item.found;
+      const location = item.details || _getLocationDetails(item.id) || {};
+      const category = location.category || item.category || {};
+      const media = Array.isArray(location.media) ? location.media.find(m => m.type === 'image' && m.url) : null;
+      const title = location.title || item.title;
+      const categoryTitle = category.title || item.category?.title || '';
+      const desc = _renderDescription(location.description || '');
+      detailEl.innerHTML = `
+        ${media ? `<div class="detail-media"><img src="${_escapeHtml(media.url)}" alt=""></div>` : ''}
+        <div class="detail-body">
+          <h2 class="detail-title">${_escapeHtml(title)}</h2>
+          ${categoryTitle ? `<div class="detail-category">${_escapeHtml(categoryTitle)}</div>` : ''}
+          <div class="detail-desc">${desc || '<p>No description available.</p>'}</div>
+          <div class="detail-found">Found <span class="detail-box">${item.found ? '✓' : ''}</span></div>
+        </div>`;
+      detailEl.querySelectorAll('[data-location-id]').forEach(link => {
+        link.addEventListener('click', (e) => {
+          e.preventDefault();
+          sendCmd({ cmd: 'pan_location', locationId: link.dataset.locationId });
+        });
+      });
     }
 
     function refreshNearbyItems() {
@@ -960,7 +1070,6 @@
         selectedIndex = Math.min(selectedIndex, Math.max(items.length - 1, 0));
       }
       render();
-      updateNearbyCircle();
     }
 
     function doToggle() {
@@ -988,9 +1097,11 @@
       if (action === 'close') {
         closeNearbyPopup();
       } else if (action === 'down') {
+        if (!items.length) return;
         selectedIndex = Math.min(selectedIndex + 1, items.length - 1);
         render();
       } else if (action === 'up') {
+        if (!items.length) return;
         selectedIndex = Math.max(selectedIndex - 1, 0);
         render();
       } else if (action === 'toggle') {
@@ -1005,10 +1116,12 @@
       }
       if (e.key === 'ArrowDown' || e.key.toLowerCase() === 's') {
         e.preventDefault();
+        if (!items.length) return;
         selectedIndex = Math.min(selectedIndex + 1, items.length - 1);
         render();
       } else if (e.key === 'ArrowUp' || e.key.toLowerCase() === 'w') {
         e.preventDefault();
+        if (!items.length) return;
         selectedIndex = Math.max(selectedIndex - 1, 0);
         render();
       } else if (e.key === 'Enter' || e.key === ' ') {
@@ -1032,7 +1145,14 @@
     render();
     updateNearbyCircle();
     // Delay para Qt processar a criação da janela antes de focar
-    setTimeout(() => { try { if (nearbyPopup && !nearbyPopup.closed) nearbyPopup.focus(); } catch (_) {} }, 150);
+    setTimeout(() => {
+      try {
+        if (nearbyPopup && !nearbyPopup.closed) {
+          nearbyPopup.resizeTo(680, 460);
+          nearbyPopup.focus();
+        }
+      } catch (_) {}
+    }, 150);
   }
 
   // ── WebSocket ─────────────────────────────────────────────────────
@@ -1100,6 +1220,9 @@
 
         } else if (msg.type === 'nearby_input') {
           if (nearbyControlsEnabled() && nearbyInputHandler) nearbyInputHandler(msg.action);
+
+        } else if (msg.type === 'pan_location') {
+          panToLocationId(msg.locationId);
 
         } else if (msg.type === 'map_marker') {
           mapDestLng = msg.lng;

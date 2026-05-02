@@ -493,6 +493,14 @@ async def _handle_client(websocket):
                             await _safe_send(client, bcast)
                     log.info("Location toggle: id=%s found=%s", location_id, found)
 
+            elif action == "pan_location":
+                location_id = cmd.get("locationId")
+                if location_id is not None:
+                    await _broadcast_all(json.dumps({
+                        "type": "pan_location",
+                        "locationId": str(location_id),
+                    }))
+
     except Exception:
         pass
     finally:
