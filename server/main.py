@@ -134,7 +134,7 @@ XINPUT_GAMEPAD_DPAD_DOWN = 0x0002
 XINPUT_GAMEPAD_LEFT_SHOULDER = 0x0100
 XINPUT_GAMEPAD_A = 0x1000
 XINPUT_GAMEPAD_B = 0x2000
-XINPUT_OPEN_NEARBY_MASK = XINPUT_GAMEPAD_LEFT_SHOULDER | XINPUT_GAMEPAD_A
+XINPUT_OPEN_NEARBY_MASK = XINPUT_GAMEPAD_LEFT_SHOULDER | XINPUT_GAMEPAD_DPAD_DOWN
 XINPUT_NEARBY_INPUTS = {
     XINPUT_GAMEPAD_DPAD_UP: "up",
     XINPUT_GAMEPAD_DPAD_DOWN: "down",
@@ -557,7 +557,7 @@ def _hotkey_thread():
                 controller_button_state[button_mask] = pressed
                 if not pressed or was_pressed:
                     continue
-                if button_mask == XINPUT_GAMEPAD_A and controller_buttons & XINPUT_GAMEPAD_LEFT_SHOULDER:
+                if button_mask == XINPUT_GAMEPAD_DPAD_DOWN and controller_buttons & XINPUT_GAMEPAD_LEFT_SHOULDER:
                     continue
                 if _hotkey_loop:
                     _hotkey_loop.call_soon_threadsafe(
