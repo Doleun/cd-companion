@@ -92,19 +92,23 @@
 
   function adjustIconSize() {
     try {
+      if (!map) return;
       const zoom    = map.getZoom();
       const maxZoom = map.getMaxZoom();
       const minZoom = map.getMinZoom();
       const iconSizeAtMaxZoom = 0.35;
       const iconSizeAtMinZoom = 0.25;
+      const rawScale = window.__cdSettings && window.__cdSettings.mapIconScale;
+      const iconScale = (typeof rawScale === 'number' && rawScale > 0) ? rawScale : 1.0;
       const scale = Math.max(0,
         Math.log(iconSizeAtMaxZoom / iconSizeAtMinZoom) /
         Math.log(maxZoom / minZoom) *
-        Math.log(zoom / minZoom)) * 2.5;
+        Math.log(zoom / minZoom)) * 2.5 * iconScale;
       if (window.mapManager && typeof window.mapManager.setIconSize === 'function')
         window.mapManager.setIconSize(scale);
     } catch (_) {}
   }
+  window.__cdUpdateMapIconSize = adjustIconSize;
 
   function getMap() {
     if (map) return map;

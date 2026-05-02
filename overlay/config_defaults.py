@@ -17,4 +17,5 @@ SETTING_DEFAULTS = {
     'nearbyControlsEnabled': False,
     'nearbyThreshold':       0.005,
     'nearbyRespectMapVisibility': True,
+    'mapIconScale':          1.0,
 }

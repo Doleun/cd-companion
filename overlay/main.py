@@ -489,6 +489,7 @@ class OverlayWindow(QMainWindow):
             f'window.__cdSettings = {json.dumps(settings)};'
             f'window.__cdApplyRoundLayout && window.__cdApplyRoundLayout(window.__cdSettings);'
             f'window.__cdApplyRotationSettings && window.__cdApplyRotationSettings(window.__cdSettings);'
+            f'window.__cdUpdateMapIconSize && window.__cdUpdateMapIconSize();'
             f'window.__cdUpdateNearbyControls && window.__cdUpdateNearbyControls();'
             f'window.__cdUpdateTeleportVisibility && window.__cdUpdateTeleportVisibility();')
 

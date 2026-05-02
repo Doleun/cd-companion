@@ -230,6 +230,29 @@ class SettingsDialog(QDialog):
         center_y_row.addWidget(self._center_y_value)
         layout.addLayout(center_y_row)
 
+        section('Map')
+        icon_row = QHBoxLayout()
+        icon_row.setSpacing(10)
+        icon_lbl = QLabel('Map icons')
+        self._map_icon_scale_val = QLabel()
+        self._map_icon_scale_val.setStyleSheet(
+            "color:#ffd060; font:13px 'Consolas'; min-width:40px;")
+        self._map_icon_scale = QSlider(Qt.Horizontal)
+        self._map_icon_scale.setRange(5, 20)
+        self._map_icon_scale.setSingleStep(1)
+        raw_icon_scale = cfg.get('mapIconScale', SETTING_DEFAULTS['mapIconScale'])
+        self._map_icon_scale.setValue(round(float(raw_icon_scale) * 10))
+
+        def _on_icon_scale(v):
+            self._map_icon_scale_val.setText(f'{v / 10:.1f}x')
+
+        _on_icon_scale(self._map_icon_scale.value())
+        self._map_icon_scale.valueChanged.connect(_on_icon_scale)
+        icon_row.addWidget(icon_lbl)
+        icon_row.addWidget(self._map_icon_scale, 1)
+        icon_row.addWidget(self._map_icon_scale_val)
+        layout.addLayout(icon_row)
+
         section('Nearby')
         option('nearbyControlsEnabled', 'Enable nearby popup shortcuts',
                'Shift+N or LB+Down opens the nearby popup. In the popup: Up/Down, W/S, or D-pad moves, '
@@ -372,6 +395,7 @@ class SettingsDialog(QDialog):
         result['centerTeleportY'] = float(self._center_y.value())
         result['headingSource'] = self._heading_combo.currentData()
         result['nearbyThreshold'] = self._nearby_radius.value() / 1000.0
+        result['mapIconScale'] = self._map_icon_scale.value() / 10.0
         self._save_nearby_hotkey()
         return result
 
