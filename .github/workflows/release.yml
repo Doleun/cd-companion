@@ -30,6 +30,12 @@ jobs:
       - name: Build executable
         run: pyinstaller CD_Companion.spec
 
+      - name: Package executable zip
+        run: |
+          New-Item -ItemType Directory -Path dist/CD_Companion -Force
+          Copy-Item -Path dist/CD_Companion.exe -Destination dist/CD_Companion/CD_Companion.exe -Force
+          Compress-Archive -Path dist/CD_Companion -DestinationPath dist/CD_Companion.zip -Force
+
       - name: Package source zip
         run: |
           $items = Get-ChildItem -Path . -Exclude dist,build,__pycache__,'*.spec' | Select-Object -ExpandProperty FullName
@@ -39,7 +45,7 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           files: |
-            dist/CD_Companion.exe
+            dist/CD_Companion.zip
             dist/CD_Companion_source_${{ github.ref_name }}.zip
           body_path: CHANGELOG.md
 
@@ -60,7 +66,7 @@ jobs:
         with:
           api_key: ${{ secrets.NEXUSMODS_API_KEY }}
           file_group_id: ${{ secrets.NEXUSMODS_FILE_GROUP_ID_EXE }}
-          filename: dist/CD_Companion.exe
+          filename: dist/CD_Companion.zip
           version: ${{ steps.meta.outputs.version }}
           display_name: CD_Companion ${{ steps.meta.outputs.version }}
           description: ${{ steps.meta.outputs.notes }}
