@@ -700,6 +700,13 @@
     const v = window.__cdSettings && window.__cdSettings.nearbyThreshold;
     return (typeof v === 'number' && v > 0) ? v : 0.005;
   }
+  function _isMapGenieCategoryVisible(categoryId) {
+    if (window.__cdSettings && window.__cdSettings.nearbyRespectMapVisibility === false) return true;
+    const categoriesMap = window.__cdMapGeniePatch?.categories?.categoriesMap;
+    if (!categoriesMap || categoryId === undefined || categoryId === null) return true;
+    const category = categoriesMap[String(categoryId)];
+    return !category || category.visible !== false;
+  }
   function _getLocationDetails(id) {
     try {
       if (!_locCache) {
@@ -867,11 +874,13 @@
       const t = _nearbyThreshold();
       return features
         .reduce((acc, f) => {
+          const categoryId = f.properties.category_id;
+          if (!_isMapGenieCategoryVisible(categoryId)) return acc;
           const [lng, lat] = f.geometry.coordinates;
           const dx = lng - lastPos.lng, dy = lat - lastPos.lat;
           const d2 = dx * dx + dy * dy;
           const details = _getLocationDetails(f.properties.locationId);
-          const category = details?.category || _getCategoryName(f.properties.category_id);
+          const category = details?.category || _getCategoryName(categoryId);
           if (d2 <= t * t) acc.push({
             id: String(f.properties.locationId),
             title: details?.title || f.properties.title || `Location ${f.properties.locationId}`,

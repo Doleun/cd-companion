@@ -16,4 +16,5 @@ SETTING_DEFAULTS = {
     'teleportEnabled':       True,
     'nearbyControlsEnabled': False,
     'nearbyThreshold':       0.005,
+    'nearbyRespectMapVisibility': True,
 }

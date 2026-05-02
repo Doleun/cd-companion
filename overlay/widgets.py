@@ -234,6 +234,8 @@ class SettingsDialog(QDialog):
         option('nearbyControlsEnabled', 'Enable nearby popup shortcuts',
                'Shift+N or LB+Down opens the nearby popup. In the popup: Up/Down, W/S, or D-pad moves, '
                'Enter, Space, or A toggles found, Esc or B closes.')
+        option('nearbyRespectMapVisibility', 'Respect MapGenie category visibility',
+               'When enabled, the nearby popup only shows locations from categories currently visible on the MapGenie map.')
         nearby_help = QLabel('LB+Down / Shift+N open. Up/Down, W/S, D-pad navigate. Enter/Space/A toggles. Esc/B closes.')
         nearby_help.setWordWrap(True)
         nearby_help.setStyleSheet('color:#7c8db5; font:11px "Segoe UI"; margin-left:26px;')

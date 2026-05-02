@@ -2,6 +2,7 @@
 
 ### Added
 - Nearby popup now pans the map to the selected location while navigating, highlights it with a red Mapbox layer, and returns to the player position when the popup closes.
+- Nearby popup can now respect the category visibility currently selected on the map, with a Settings toggle to show all categories instead.
 
 ### Fixed
 - Nearby popup controller navigation now only works while the popup window is the active foreground window, preventing D-pad/A/B from changing the popup while playing with the game focused.

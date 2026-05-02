@@ -31,6 +31,10 @@ from PyQt5.QtWidgets import (QApplication, QMainWindow, QWidget,
 from PyQt5.QtWebEngineWidgets import QWebEngineView, QWebEnginePage
 
 from overlay.config_defaults import SETTING_DEFAULTS
+from overlay.mapgenie_patch import (
+    install_mapgenie_patch,
+    register_mapgenie_patch_scheme,
+)
 
 # ── Configuração ─────────────────────────────────────────────────────
 
@@ -207,6 +211,9 @@ class OverlayWindow(QMainWindow):
         page = InterceptPage(self._view)
         page.login_needed.connect(self._on_login_needed)
         self._view.setPage(page)
+        self._mapgenie_patch_refs = None
+        if os.environ.get('CD_PATCH_MAPGENIE_MAP_JS', '1') != '0':
+            self._mapgenie_patch_refs = install_mapgenie_patch(page.profile(), self)
 
         self._view.loadFinished.connect(self._on_load_finished)
         self._view.load(QUrl(url))
@@ -547,6 +554,7 @@ def _start_server_thread(ready_event):
 def main():
     # Habilitar DPI awareness antes de criar o app
     ctypes.windll.user32.SetProcessDPIAware()
+    register_mapgenie_patch_scheme()
 
     # ── Log file (sem console, logs vão para arquivo) ─────────────────
     # Definido ANTES de importar server.main, pois o logging é configurado
