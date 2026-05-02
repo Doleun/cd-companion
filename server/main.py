@@ -115,17 +115,71 @@ HOTKEY_SETTINGS_FILE = os.path.join(SAVE_DIR, "cd_hotkeys.json")
 DEFAULT_HOTKEYS = {
     "teleport_marker": {"vk": 0x74, "mod": 0,    "enabled": True},   # F5
     "abort":           {"vk": 0x74, "mod": 0x10,  "enabled": True},   # Shift+F5
+    "open_nearby":     {"vk": 0x4E, "mod": 0x10,  "enabled": True},   # Shift+N
 }
 
 # Windows virtual key codes
 VK_NAMES = {
     0x70: "F1", 0x71: "F2", 0x72: "F3", 0x73: "F4", 0x74: "F5", 0x75: "F6",
     0x76: "F7", 0x77: "F8", 0x78: "F9", 0x79: "F10", 0x7A: "F11", 0x7B: "F12",
+    0x4E: "N",
 }
 VK_MOD_SHIFT = 0x10
 VK_MOD_CTRL  = 0x11
 VK_MOD_ALT   = 0x12
 MOD_NAMES = {VK_MOD_CTRL: "Ctrl", VK_MOD_ALT: "Alt", VK_MOD_SHIFT: "Shift"}
+
+XINPUT_GAMEPAD_DPAD_UP = 0x0001
+XINPUT_GAMEPAD_DPAD_DOWN = 0x0002
+XINPUT_GAMEPAD_LEFT_SHOULDER = 0x0100
+XINPUT_GAMEPAD_A = 0x1000
+XINPUT_GAMEPAD_B = 0x2000
+XINPUT_OPEN_NEARBY_MASK = XINPUT_GAMEPAD_LEFT_SHOULDER | XINPUT_GAMEPAD_A
+XINPUT_NEARBY_INPUTS = {
+    XINPUT_GAMEPAD_DPAD_UP: "up",
+    XINPUT_GAMEPAD_DPAD_DOWN: "down",
+    XINPUT_GAMEPAD_A: "toggle",
+    XINPUT_GAMEPAD_B: "close",
+}
+
+class XINPUT_GAMEPAD(ctypes.Structure):
+    _fields_ = [
+        ("wButtons", ctypes.wintypes.WORD),
+        ("bLeftTrigger", ctypes.wintypes.BYTE),
+        ("bRightTrigger", ctypes.wintypes.BYTE),
+        ("sThumbLX", ctypes.wintypes.SHORT),
+        ("sThumbLY", ctypes.wintypes.SHORT),
+        ("sThumbRX", ctypes.wintypes.SHORT),
+        ("sThumbRY", ctypes.wintypes.SHORT),
+    ]
+
+class XINPUT_STATE(ctypes.Structure):
+    _fields_ = [
+        ("dwPacketNumber", ctypes.wintypes.DWORD),
+        ("Gamepad", XINPUT_GAMEPAD),
+    ]
+
+def _load_xinput_get_state():
+    for dll_name in ("xinput1_4.dll", "xinput1_3.dll", "xinput9_1_0.dll"):
+        try:
+            dll = ctypes.WinDLL(dll_name)
+            fn = dll.XInputGetState
+            fn.argtypes = [ctypes.wintypes.DWORD, ctypes.POINTER(XINPUT_STATE)]
+            fn.restype = ctypes.wintypes.DWORD
+            return fn
+        except Exception:
+            continue
+    return None
+
+def _controller_buttons(get_state):
+    if not get_state:
+        return 0
+    state = XINPUT_STATE()
+    buttons = 0
+    for idx in range(4):
+        if get_state(idx, ctypes.byref(state)) == 0:
+            buttons |= state.Gamepad.wButtons
+    return buttons
 
 def _load_hotkey_settings():
     try:
@@ -150,6 +204,9 @@ def _save_hotkey_settings(hotkeys):
     os.makedirs(SAVE_DIR, exist_ok=True)
     with open(HOTKEY_SETTINGS_FILE, 'w', encoding='utf-8') as f:
         json.dump(hotkeys, f, indent=2)
+
+def _nearby_controls_enabled():
+    return os.environ.get('CD_NEARBY_CONTROLS_ENABLED', '0') == '1'
 
 CALIBRATION_FILES = {
     "pywel": os.path.join(SAVE_DIR, "cd_calibration_pywel.json"),
@@ -423,11 +480,13 @@ async def _handle_client(websocket):
             elif action == "location_toggle":
                 location_id = cmd.get("locationId")
                 found = cmd.get("found")
+                source_client_id = cmd.get("sourceClientId")
                 if location_id is not None and found is not None:
                     bcast = json.dumps({
                         "type": "location_toggle",
                         "locationId": str(location_id),
                         "found": bool(found),
+                        "sourceClientId": source_client_id,
                     })
                     for client in set(_clients):
                         if client is not websocket:
@@ -456,8 +515,11 @@ def _hotkey_thread():
     """Thread que faz polling de hotkeys globais via GetAsyncKeyState."""
     import threading
     get_key = ctypes.windll.user32.GetAsyncKeyState
+    get_xinput_state = _load_xinput_get_state()
     hotkeys = _load_hotkey_settings()
     key_state = {}
+    controller_open_nearby_pressed = False
+    controller_button_state = {}
 
     def _display(hk):
         vk = hk["vk"]
@@ -471,14 +533,44 @@ def _hotkey_thread():
         if cfg["enabled"]:
             log.info("Hotkey: %s → %s", _display(cfg), hk_id)
 
+    if get_xinput_state:
+        log.info("Controller hotkey: LB+A -> open_nearby")
+
     while True:
         time.sleep(0.05)  # 50ms polling
 
         if not _engine or not _engine.attached or not _engine.hooks_installed:
             continue
 
+        nearby_enabled = _nearby_controls_enabled()
+        if nearby_enabled:
+            controller_buttons = _controller_buttons(get_xinput_state)
+            controller_pressed = bool((controller_buttons & XINPUT_OPEN_NEARBY_MASK) == XINPUT_OPEN_NEARBY_MASK)
+            if controller_pressed and not controller_open_nearby_pressed and _hotkey_loop:
+                _hotkey_loop.call_soon_threadsafe(
+                    asyncio.ensure_future, _hotkey_open_nearby())
+            controller_open_nearby_pressed = controller_pressed
+
+            for button_mask, action in XINPUT_NEARBY_INPUTS.items():
+                pressed = bool(controller_buttons & button_mask)
+                was_pressed = controller_button_state.get(button_mask, False)
+                controller_button_state[button_mask] = pressed
+                if not pressed or was_pressed:
+                    continue
+                if button_mask == XINPUT_GAMEPAD_A and controller_buttons & XINPUT_GAMEPAD_LEFT_SHOULDER:
+                    continue
+                if _hotkey_loop:
+                    _hotkey_loop.call_soon_threadsafe(
+                        asyncio.ensure_future, _hotkey_nearby_input(action))
+        else:
+            controller_open_nearby_pressed = False
+            controller_button_state.clear()
+
         for hk_id, cfg in hotkeys.items():
             if not cfg["enabled"]:
+                key_state[hk_id] = False
+                continue
+            if hk_id == "open_nearby" and not nearby_enabled:
                 key_state[hk_id] = False
                 continue
 
@@ -503,6 +595,9 @@ def _hotkey_thread():
                     elif hk_id == "abort":
                         _hotkey_loop.call_soon_threadsafe(
                             asyncio.ensure_future, _hotkey_abort())
+                    elif hk_id == "open_nearby":
+                        _hotkey_loop.call_soon_threadsafe(
+                            asyncio.ensure_future, _hotkey_open_nearby())
 
             key_state[hk_id] = pressed
 
@@ -543,6 +638,14 @@ async def _hotkey_abort():
         loop.call_later(INVULN_SECONDS, _engine.set_invuln, False)
     log.info("Hotkey abort → (%.1f, %.1f, %.1f) — %s", ax, ay, az, 'ok' if ok else err)
     _pre_teleport_pos = None
+
+async def _hotkey_open_nearby():
+    """Abre o popup de localizações próximas no overlay (hotkey)."""
+    await _broadcast_all(json.dumps({"type": "open_nearby"}))
+
+async def _hotkey_nearby_input(action: str):
+    """Envia comando de navegacao do controle para o popup nearby."""
+    await _broadcast_all(json.dumps({"type": "nearby_input", "action": action}))
 
 async def _broadcast_loop():
     global _engine, _last_pos

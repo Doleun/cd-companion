@@ -16,6 +16,9 @@
   const WS_URL = '$WS_URL';
   const RECONNECT_MS = 3000;
   const CENTER_TELEPORT_Y_KEY = 'cd_center_teleport_y';
+  const CLIENT_ID = (window.crypto && typeof window.crypto.randomUUID === 'function')
+    ? window.crypto.randomUUID()
+    : `overlay-${Date.now()}-${Math.random().toString(16).slice(2)}`;
 
   let ws              = null;
   let marker          = null;
@@ -33,6 +36,8 @@
   let rotateWithCamera = !!(window.__cdSettings && window.__cdSettings.rotateWithCamera);
   let waypoints       = [];
   let waypointPopup   = null;
+  let nearbyPopup     = null;
+  let nearbyInputHandler = null;
   let waypointFilter  = '';
   let calibrationMode = false;
   let hasPreTeleport  = false;
@@ -528,7 +533,11 @@
   }
 
   function sendCmd(obj) {
-    if (ws && ws.readyState === 1) ws.send(JSON.stringify(obj));
+    if (!ws || ws.readyState !== 1) return;
+    const payload = obj && obj.cmd === 'location_toggle'
+      ? { ...obj, sourceClientId: CLIENT_ID }
+      : obj;
+    ws.send(JSON.stringify(payload));
   }
 
   function syncCenterTeleportInputs() {
@@ -572,6 +581,13 @@
 
   // ── MapGenie location sync ────────────────────────────────────────
   let _replayingToggle = false;
+  function setUserLocationFound(locationId, found) {
+    if (!window.user?.locations) return;
+    const id = String(locationId);
+    if (found) window.user.locations[id] = true;
+    else delete window.user.locations[id];
+  }
+
   (function () {
     // ── Fetch patch ──
     const _origFetch = window.fetch;
@@ -586,7 +602,10 @@
           const parts = url.split('/api/v1/user/locations/');
           if (parts.length > 1 && (method === 'PUT' || method === 'DELETE')) {
             const locationId = parts[1].split('/')[0].split('?')[0];
-            if (locationId) sendCmd({ cmd: 'location_toggle', locationId, found: method === 'PUT' });
+            if (locationId) {
+              sendCmd({ cmd: 'location_toggle', locationId, found: method === 'PUT' });
+              setUserLocationFound(locationId, method === 'PUT');
+            }
           }
         } catch (_) {}
       }
@@ -609,7 +628,10 @@
         const parts = (xhr._cdUrl || '').split('/api/v1/user/locations/');
         if (parts.length > 1 && (xhr._cdMethod === 'PUT' || xhr._cdMethod === 'DELETE')) {
           const locationId = parts[1].split('/')[0].split('?')[0];
-          if (locationId) sendCmd({ cmd: 'location_toggle', locationId, found: xhr._cdMethod === 'PUT' });
+          if (locationId) {
+            sendCmd({ cmd: 'location_toggle', locationId, found: xhr._cdMethod === 'PUT' });
+            setUserLocationFound(locationId, xhr._cdMethod === 'PUT');
+          }
         }
       });
       return _origSend.apply(this, args);
@@ -639,11 +661,260 @@
 
   function _onLocationToggle(locationId, found) {
     _showLocationToast(locationId, found);
+    setUserLocationFound(locationId, found);
     if (typeof window.mapManager?.markLocationAsFound === 'function') {
       _replayingToggle = true;
       window.mapManager.markLocationAsFound(parseInt(locationId, 10), found);
       setTimeout(() => { _replayingToggle = false; }, 2000);
     }
+  }
+
+  // ── Nearby Locations ─────────────────────────────────────────────
+  // Threshold em coordenadas lng/lat do Mapbox — ajustar conforme necessário.
+  // O mapa usa valores aprox. entre -1 e 1; 0.005 equivale a uma área pequena.
+  const NEARBY_THRESHOLD = (window.__cdSettings && window.__cdSettings.nearbyThreshold) || 0.005;
+  const NEARBY_REFRESH_MS = 500;
+
+  function nearbyControlsEnabled() {
+    return !!(window.__cdSettings && window.__cdSettings.nearbyControlsEnabled);
+  }
+
+  window.__cdUpdateNearbyControls = function() {
+    if (nearbyControlsEnabled()) return;
+    const popup = nearbyPopup;
+    nearbyPopup = null;
+    nearbyInputHandler = null;
+    try { if (popup && !popup.closed) popup.close(); } catch (_) {}
+  };
+
+  function isNearbyPopupOpen() {
+    try {
+      return !!(nearbyPopup && !nearbyPopup.closed);
+    } catch (_) {
+      return false;
+    }
+  }
+
+  function getNearbyLocations() {
+    if (!lastPos || !map) return [];
+    try {
+      const features = map.getStyle().sources['locations-data']?.data?.features;
+      if (!features) return [];
+      const t = NEARBY_THRESHOLD;
+      return features
+        .filter(f => {
+          const [lng, lat] = f.geometry.coordinates;
+          const dx = lng - lastPos.lng, dy = lat - lastPos.lat;
+          return dx * dx + dy * dy <= t * t;
+        })
+        .map(f => ({
+          id: String(f.properties.locationId),
+          title: f.properties.title || `Location ${f.properties.locationId}`,
+          category: f.properties.category_id,
+          found: !!(window.user?.locations?.[f.properties.locationId])
+        }));
+    } catch (_) { return []; }
+  }
+
+  // Exposto globalmente para que o popup possa chamar mesmo sem window.opener funcionar
+  window.__cdToggleLocation = function(locationId, found) {
+    const csrf = document.head.querySelector('meta[name="csrf-token"]')?.content || '';
+    fetch(`/api/v1/user/locations/${locationId}`, {
+      method: found ? 'PUT' : 'DELETE',
+      credentials: 'include',
+      headers: {
+        'X-Requested-With': 'XMLHttpRequest',
+        'Accept': 'application/json',
+        'X-CSRF-TOKEN': csrf,
+      }
+    }).catch(() => {});
+  };
+
+  function openNearbyPopup() {
+    if (!nearbyControlsEnabled()) return;
+    if (isNearbyPopupOpen()) {
+      closeNearbyPopup();
+      return;
+    }
+    nearbyPopup = null;
+    nearbyInputHandler = null;
+
+    let items = getNearbyLocations();
+
+    nearbyPopup = window.open('', 'cdNearbyLocations',
+      'width=320,height=460,resizable=yes,scrollbars=no');
+    if (!nearbyPopup) return;
+
+    let selectedIndex = 0;
+    const doc = nearbyPopup.document;
+    doc.open();
+    doc.write(`<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>Nearby Locations</title>
+  <style>
+    html,body{margin:0;width:100%;height:100%;overflow:hidden;
+      background:#0f0f1a;color:#e8e8e8;
+      font:12px/1.5 'Segoe UI',system-ui,sans-serif}
+    *{box-sizing:border-box}
+    .wrap{height:100%;display:flex;flex-direction:column;
+      background:rgba(12,12,18,.97);border:1px solid rgba(255,208,96,.25)}
+    .header{padding:8px 12px;border-bottom:1px solid rgba(255,255,255,.07);
+      display:flex;align-items:center;gap:8px;flex-shrink:0}
+    .header-title{flex:1;font-size:13px;font-weight:600;color:#ffd060}
+    .header-count{font-size:11px;color:#555}
+    .list{flex:1;overflow-y:auto;padding:4px}
+    .empty{padding:24px;text-align:center;color:#555;font-size:12px}
+    .item{display:flex;align-items:center;gap:8px;
+      padding:6px 10px;border-radius:5px;cursor:pointer;
+      border:1px solid transparent;margin-bottom:2px}
+    .item.selected{background:rgba(255,208,96,.12);border-color:rgba(255,208,96,.4)}
+    .item:not(.selected):hover{background:rgba(255,255,255,.04)}
+    .check{font-size:14px;width:18px;flex-shrink:0;text-align:center}
+    .found .check{color:#60e890}
+    .notfound .check{color:#444}
+    .item-title{flex:1;font-size:12px;overflow:hidden;
+      text-overflow:ellipsis;white-space:nowrap}
+    .found .item-title{color:#e8e8e8}
+    .notfound .item-title{color:#999}
+    .footer{padding:5px 12px;border-top:1px solid rgba(255,255,255,.07);
+      flex-shrink:0;font-size:10px;color:#444;display:flex;gap:14px}
+    .footer b{color:#666}
+  </style>
+</head>
+<body tabindex="0">
+  <div class="wrap">
+    <div class="header">
+      <div class="header-title">📍 Nearby</div>
+      <div class="header-count" id="hcount"></div>
+    </div>
+    <div class="list" id="list"></div>
+    <div class="footer">
+      <span><b>↑↓</b> navegar</span>
+      <span><b>Enter</b> marcar</span>
+      <span><b>Esc</b> fechar</span>
+    </div>
+  </div>
+  <script>
+    // Foco chamado de dentro da própria janela — Qt honra isso
+    window.focus();
+    document.body.focus();
+  </script>
+</body>
+</html>`);
+    doc.close();
+
+    function render() {
+      const list   = doc.getElementById('list');
+      const hcount = doc.getElementById('hcount');
+      if (!list) return;
+      if (items.length === 0) {
+        list.innerHTML = '<div class="empty">Nenhuma localização próxima</div>';
+        if (hcount) hcount.textContent = '';
+        return;
+      }
+      if (hcount) hcount.textContent = `${items.length} localização${items.length !== 1 ? 'ões' : ''}`;
+      list.innerHTML = items.map((item, i) => {
+        const cls = item.found ? 'found' : 'notfound';
+        const sel = i === selectedIndex ? ' selected' : '';
+        return `<div class="item ${cls}${sel}" data-idx="${i}">
+          <div class="check">${item.found ? '✓' : '○'}</div>
+          <div class="item-title" title="${item.title}">${item.title}</div>
+        </div>`;
+      }).join('');
+      const sel = list.querySelector('.selected');
+      if (sel) sel.scrollIntoView({ block: 'nearest' });
+      list.querySelectorAll('.item').forEach(el => {
+        el.addEventListener('click', () => {
+          selectedIndex = +el.dataset.idx;
+          doToggle();
+        });
+      });
+    }
+
+    function refreshNearbyItems() {
+      const selectedId = items[selectedIndex]?.id || null;
+      items = getNearbyLocations();
+      if (selectedId) {
+        const nextIndex = items.findIndex(item => item.id === selectedId);
+        selectedIndex = nextIndex >= 0
+          ? nextIndex
+          : Math.min(selectedIndex, Math.max(items.length - 1, 0));
+      } else {
+        selectedIndex = Math.min(selectedIndex, Math.max(items.length - 1, 0));
+      }
+      render();
+    }
+
+    function doToggle() {
+      if (!items.length) return;
+      const item = items[selectedIndex];
+      item.found = !item.found;
+      setUserLocationFound(item.id, item.found);
+      // Delega ao mapManager: atualiza UI, faz o fetch interno e o nosso patch intercepta
+      // (sem _replayingToggle = true, então o broadcast é disparado normalmente)
+      if (typeof window.mapManager?.markLocationAsFound === 'function') {
+        window.mapManager.markLocationAsFound(parseInt(item.id, 10), item.found);
+      }
+      render();
+    }
+
+    function closeNearbyPopup() {
+      const popup = nearbyPopup;
+      nearbyPopup = null;
+      nearbyInputHandler = null;
+      if (popup) popup.close();
+    }
+
+    nearbyInputHandler = function(action) {
+      if (action === 'close') {
+        closeNearbyPopup();
+      } else if (action === 'down') {
+        selectedIndex = Math.min(selectedIndex + 1, items.length - 1);
+        render();
+      } else if (action === 'up') {
+        selectedIndex = Math.max(selectedIndex - 1, 0);
+        render();
+      } else if (action === 'toggle') {
+        doToggle();
+      }
+    };
+
+    function keyHandler(e) {
+      if (e.key === 'Escape') {
+        closeNearbyPopup();
+        return;
+      }
+      if (e.key === 'ArrowDown' || e.key.toLowerCase() === 's') {
+        e.preventDefault();
+        selectedIndex = Math.min(selectedIndex + 1, items.length - 1);
+        render();
+      } else if (e.key === 'ArrowUp' || e.key.toLowerCase() === 'w') {
+        e.preventDefault();
+        selectedIndex = Math.max(selectedIndex - 1, 0);
+        render();
+      } else if (e.key === 'Enter' || e.key === ' ') {
+        e.preventDefault();
+        doToggle();
+      }
+    }
+
+    // Listener apenas no window do popup — doc.addEventListener dispara em duplicata
+    nearbyPopup.addEventListener('keydown', keyHandler);
+    const refreshTimer = setInterval(() => {
+      if (!isNearbyPopupOpen()) {
+        nearbyPopup = null;
+        nearbyInputHandler = null;
+        clearInterval(refreshTimer);
+        return;
+      }
+      refreshNearbyItems();
+    }, NEARBY_REFRESH_MS);
+
+    render();
+    // Delay para Qt processar a criação da janela antes de focar
+    setTimeout(() => { try { if (nearbyPopup && !nearbyPopup.closed) nearbyPopup.focus(); } catch (_) {} }, 150);
   }
 
   // ── WebSocket ─────────────────────────────────────────────────────
@@ -702,7 +973,14 @@
             setStatus(`Calibration: ${msg.count} point(s) saved`, '#60e890', 3000);
           }
         } else if (msg.type === 'location_toggle') {
+          if (msg.sourceClientId && msg.sourceClientId === CLIENT_ID) return;
           _onLocationToggle(msg.locationId, msg.found);
+
+        } else if (msg.type === 'open_nearby') {
+          if (nearbyControlsEnabled()) openNearbyPopup();
+
+        } else if (msg.type === 'nearby_input') {
+          if (nearbyControlsEnabled() && nearbyInputHandler) nearbyInputHandler(msg.action);
 
         } else if (msg.type === 'map_marker') {
           mapDestLng = msg.lng;

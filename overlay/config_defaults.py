@@ -14,4 +14,5 @@ SETTING_DEFAULTS = {
     'centerTeleportY':       1000.0,
     'disableGpuVsync':       False,
     'teleportEnabled':       True,
+    'nearbyControlsEnabled': False,
 }
