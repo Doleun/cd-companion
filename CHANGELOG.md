@@ -1,8 +1,15 @@
 ## v0.05.00
 
 ### Added
-- Visual scan radius circle on the MapGenie map showing the nearby scan area around the player (visible when nearby controls are enabled).
-- Nearby popup now shows location category icon and name per item, sorted by distance with distance value displayed.
-- Category icon overlaid with a found/not-found badge in the bottom-right corner.
-- Nearby scan radius configurable (0.003–0.008) via Settings dialog.
-- Nearby popup hotkey configurable via Settings dialog (saved to cd_hotkeys.json, restart required).
+- Nearby popup: category icon and name shown per location, sourced from MapGenie data.
+- Nearby popup: found/unfound badge overlaid on category icon (bottom-right corner).
+- Nearby popup: locations sorted by distance, with distance value displayed per item.
+- Scan radius circle on the MapGenie map showing the nearby scan area (visible when nearby controls are enabled).
+- Nearby scan radius configurable in Settings (0.003–0.008, default 0.005).
+- Nearby popup hotkey configurable in Settings (saved to cd_hotkeys.json, restart required).
+
+### Fixed
+- Nearby popup no longer opens when pressing the assigned hotkey while editing it in Settings.
+
+### Improved
+- Nearby popup list no longer resets scroll on each refresh; skips render entirely when nothing changed.

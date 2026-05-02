@@ -1,1 +1,1 @@
-Nearby popup overhaul: category icons with found/unfound badge, sorted by distance, scan radius circle on map, configurable radius and hotkey in Settings.
+Nearby popup: category icons, found badge, sorted by distance. Scan radius circle on map. Configurable radius and hotkey in Settings. Scroll no longer resets on refresh.
