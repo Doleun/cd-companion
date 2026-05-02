@@ -5,6 +5,7 @@ Contém: SettingsDialog, _PopupWebWindow, _InterceptPage, _LoginPrompt,
 """
 
 import ctypes
+import ctypes.wintypes
 
 from PyQt5.QtCore import Qt, QPoint, QTimer, pyqtSignal, QObject
 from PyQt5.QtGui import QKeySequence
@@ -15,6 +16,59 @@ from PyQt5.QtWebEngineWidgets import QWebEngineView, QWebEnginePage
 
 # Importa SETTING_DEFAULTS do módulo de configuração
 from overlay.config_defaults import SETTING_DEFAULTS
+
+
+def _find_process_window(exe_name):
+    user32 = ctypes.windll.user32
+    kernel32 = ctypes.windll.kernel32
+    found = [None]
+    pid = ctypes.wintypes.DWORD()
+    target = exe_name.lower()
+
+    EnumProc = ctypes.WINFUNCTYPE(ctypes.c_bool,
+                                   ctypes.wintypes.HWND,
+                                   ctypes.wintypes.LPARAM)
+
+    @EnumProc
+    def _cb(hwnd, _):
+        if not user32.IsWindowVisible(hwnd):
+            return True
+        user32.GetWindowThreadProcessId(hwnd, ctypes.byref(pid))
+        hproc = kernel32.OpenProcess(0x1000, False, pid)
+        if not hproc:
+            return True
+        buf = ctypes.create_unicode_buffer(260)
+        size = ctypes.wintypes.DWORD(260)
+        ok = kernel32.QueryFullProcessImageNameW(hproc, 0, buf, ctypes.byref(size))
+        kernel32.CloseHandle(hproc)
+        if ok and buf.value.lower().endswith(target):
+            rc = ctypes.wintypes.RECT()
+            user32.GetWindowRect(hwnd, ctypes.byref(rc))
+            if rc.right - rc.left > 200:
+                found[0] = hwnd
+                return False
+        return True
+
+    user32.EnumWindows(_cb, 0)
+    return found[0]
+
+
+def focus_game_window():
+    hwnd = _find_process_window('crimsondesert.exe')
+    if not hwnd:
+        return
+    user32 = ctypes.windll.user32
+    kernel32 = ctypes.windll.kernel32
+    user32.ShowWindow(hwnd, 9)  # SW_RESTORE
+    fg_hwnd = user32.GetForegroundWindow()
+    fg_tid = user32.GetWindowThreadProcessId(fg_hwnd, None)
+    my_tid = kernel32.GetCurrentThreadId()
+    if fg_tid and fg_tid != my_tid:
+        user32.AttachThreadInput(fg_tid, my_tid, True)
+        user32.SetForegroundWindow(hwnd)
+        user32.AttachThreadInput(fg_tid, my_tid, False)
+    else:
+        user32.SetForegroundWindow(hwnd)
 
 # ── Estilos ──────────────────────────────────────────────────────────
 
@@ -212,6 +266,7 @@ class PopupWebWindow(QMainWindow):
     def closeEvent(self, event):
         self.closed_with_pos.emit(self.pos())
         super().closeEvent(event)
+        QTimer.singleShot(50, focus_game_window)
 
     def page(self):
         return self._page
