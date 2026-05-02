@@ -243,13 +243,13 @@ class SettingsDialog(QDialog):
         self._nearby_radius_val.setStyleSheet(
             "color:#ffd060; font:13px 'Consolas'; min-width:40px;")
         self._nearby_radius = QSlider(Qt.Horizontal)
-        self._nearby_radius.setRange(3, 8)
+        self._nearby_radius.setRange(1, 8)
         self._nearby_radius.setSingleStep(1)
         raw = cfg.get('nearbyThreshold', SETTING_DEFAULTS['nearbyThreshold'])
         self._nearby_radius.setValue(round(float(raw) * 1000))
-        self._nearby_radius_val.setText(f'{self._nearby_radius.value() / 1000:.3f}')
+        self._nearby_radius_val.setText(str(self._nearby_radius.value()))
         self._nearby_radius.valueChanged.connect(
-            lambda v: self._nearby_radius_val.setText(f'{v / 1000:.3f}'))
+            lambda v: self._nearby_radius_val.setText(str(v)))
         radius_row.addWidget(radius_lbl)
         radius_row.addWidget(self._nearby_radius, 1)
         radius_row.addWidget(self._nearby_radius_val)
