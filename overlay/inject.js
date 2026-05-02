@@ -791,9 +791,9 @@
     </div>
     <div class="list" id="list"></div>
     <div class="footer">
-      <span><b>↑↓</b> navegar</span>
-      <span><b>Enter</b> marcar</span>
-      <span><b>Esc</b> fechar</span>
+      <span style="margin-right: 5px"><b>↑↓/W/A/up-pad/down-pad</b> Navigate</span>
+      <span style="margin-right: 5px"><b>Enter/A-pad</b> Mark</span>
+      <span><b>Esc/B-pad</b> CNlose</span>
     </div>
   </div>
   <script>
@@ -810,11 +810,11 @@
       const hcount = doc.getElementById('hcount');
       if (!list) return;
       if (items.length === 0) {
-        list.innerHTML = '<div class="empty">Nenhuma localização próxima</div>';
+        list.innerHTML = '<div class="empty">No location nearby</div>';
         if (hcount) hcount.textContent = '';
         return;
       }
-      if (hcount) hcount.textContent = `${items.length} localização${items.length !== 1 ? 'ões' : ''}`;
+      if (hcount) hcount.textContent = `${items.length} location${items.length !== 1 ? 's' : ''}`;
       list.innerHTML = items.map((item, i) => {
         const cls = item.found ? 'found' : 'notfound';
         const sel = i === selectedIndex ? ' selected' : '';

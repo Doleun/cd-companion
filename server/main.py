@@ -640,11 +640,11 @@ async def _hotkey_abort():
     _pre_teleport_pos = None
 
 async def _hotkey_open_nearby():
-    """Abre o popup de localizações próximas no overlay (hotkey)."""
+    """Opens the nearby locations popup in the overlay (hotkey)."""
     await _broadcast_all(json.dumps({"type": "open_nearby"}))
 
 async def _hotkey_nearby_input(action: str):
-    """Envia comando de navegacao do controle para o popup nearby."""
+    """Sends navigation command from the controller to the nearby popup.."""
     await _broadcast_all(json.dumps({"type": "nearby_input", "action": action}))
 
 async def _broadcast_loop():
