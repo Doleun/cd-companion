@@ -519,10 +519,31 @@ async def _broadcast_status(status: str):
 
 _hotkey_loop = None  # referência ao asyncio loop para schedule de ações
 _nearby_hotkey_paused = False  # True enquanto usuário edita o atalho nas Settings
+_nearby_popup_hwnd = None
 
 def set_nearby_hotkey_paused(paused: bool):
     global _nearby_hotkey_paused
     _nearby_hotkey_paused = paused
+
+def set_nearby_popup_hwnd(hwnd):
+    """Registra a janela do nearby popup para filtrar inputs globais do controle."""
+    global _nearby_popup_hwnd
+    _nearby_popup_hwnd = int(hwnd) if hwnd else None
+
+def _nearby_popup_is_foreground():
+    hwnd = _nearby_popup_hwnd
+    if not hwnd:
+        return False
+    try:
+        user32 = ctypes.windll.user32
+        user32.GetForegroundWindow.restype = ctypes.wintypes.HWND
+        user32.GetAncestor.argtypes = [ctypes.wintypes.HWND, ctypes.wintypes.UINT]
+        user32.GetAncestor.restype = ctypes.wintypes.HWND
+        fg_hwnd = user32.GetForegroundWindow()
+        root_hwnd = user32.GetAncestor(fg_hwnd, 2)  # GA_ROOT
+        return int(fg_hwnd) == hwnd or int(root_hwnd) == hwnd
+    except Exception:
+        return False
 
 def _hotkey_thread():
     """Thread que faz polling de hotkeys globais via GetAsyncKeyState."""
@@ -571,6 +592,8 @@ def _hotkey_thread():
                 if not pressed or was_pressed:
                     continue
                 if button_mask == XINPUT_GAMEPAD_DPAD_DOWN and controller_buttons & XINPUT_GAMEPAD_LEFT_SHOULDER:
+                    continue
+                if not _nearby_popup_is_foreground():
                     continue
                 if _hotkey_loop:
                     _hotkey_loop.call_soon_threadsafe(

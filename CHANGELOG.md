@@ -1,6 +1,7 @@
 ## v0.05.02
 
 ### Fixed
+- Nearby popup controller navigation now only works while the popup window is the active foreground window, preventing D-pad/A/B from changing the popup while playing with the game focused.
 - Nearby scan radius slider now supports a smaller minimum radius.
 - Nearby scan radius is displayed as a simple 1-8 value in Settings while still saving the internal 0.001-0.008 map radius.
 

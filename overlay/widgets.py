@@ -20,9 +20,13 @@ from PyQt5.QtWebEngineWidgets import QWebEngineView, QWebEnginePage
 from overlay.config_defaults import SETTING_DEFAULTS
 
 try:
-    from server.main import set_nearby_hotkey_paused as _set_nearby_hotkey_paused
+    from server.main import (
+        set_nearby_hotkey_paused as _set_nearby_hotkey_paused,
+        set_nearby_popup_hwnd as _set_nearby_popup_hwnd,
+    )
 except Exception:
     _set_nearby_hotkey_paused = None
+    _set_nearby_popup_hwnd = None
 
 # ── Hotkey helpers ────────────────────────────────────────────────────
 _SAVE_DIR = os.path.join(os.environ.get('LOCALAPPDATA', ''), 'CD_Teleport')
@@ -399,6 +403,7 @@ class PopupWebWindow(QMainWindow):
         self.setWindowTitle(title)
         self.setWindowFlags(Qt.Tool | Qt.WindowStaysOnTopHint | Qt.WindowCloseButtonHint)
         self.setAttribute(Qt.WA_DeleteOnClose)
+        self._is_nearby_popup = False
         self.resize(300, 560)
         self._view = QWebEngineView(self)
         self._page = QWebEnginePage(self._view)
@@ -406,7 +411,14 @@ class PopupWebWindow(QMainWindow):
         self.setCentralWidget(self._view)
         QShortcut(QKeySequence(Qt.Key_Escape), self, self.close)
 
+    def mark_nearby_popup(self):
+        self._is_nearby_popup = True
+        if _set_nearby_popup_hwnd:
+            _set_nearby_popup_hwnd(int(self.winId()))
+
     def closeEvent(self, event):
+        if self._is_nearby_popup and _set_nearby_popup_hwnd:
+            _set_nearby_popup_hwnd(None)
         self.closed_with_pos.emit(self.pos())
         super().closeEvent(event)
         QTimer.singleShot(50, focus_game_window)
@@ -432,6 +444,8 @@ class InterceptPage(QWebEnginePage):
         popup._page.windowCloseRequested.connect(popup.close)
         popup._page.geometryChangeRequested.connect(
             lambda rect, p=popup: p.resize(rect.width(), rect.height()))
+        popup._page.titleChanged.connect(
+            lambda title, p=popup: p.mark_nearby_popup() if title == 'Nearby Locations' else None)
         self._position_popup(popup, overlay)
         popup.show()
         QTimer.singleShot(0, lambda: self._activate_popup(popup))
