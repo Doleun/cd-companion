@@ -672,15 +672,18 @@
   // ── Nearby Locations ─────────────────────────────────────────────
   // Threshold em coordenadas lng/lat do Mapbox — ajustar conforme necessário.
   // O mapa usa valores aprox. entre -1 e 1; 0.005 equivale a uma área pequena.
-  const NEARBY_THRESHOLD = (window.__cdSettings && window.__cdSettings.nearbyThreshold) || 0.005;
   const NEARBY_REFRESH_MS = 500;
+  function _nearbyThreshold() {
+    const v = window.__cdSettings && window.__cdSettings.nearbyThreshold;
+    return (typeof v === 'number' && v > 0) ? v : 0.005;
+  }
   const _NR_SRC   = 'cd-nearby-radius';
   const _NR_FILL  = 'cd-nearby-radius-fill';
   const _NR_LINE  = 'cd-nearby-radius-line';
 
   function _buildNearbyCircleGeoJSON(lng, lat) {
     const steps = 64;
-    const r = NEARBY_THRESHOLD;
+    const r = _nearbyThreshold();
     const coords = [];
     for (let i = 0; i <= steps; i++) {
       const a = (i / steps) * 2 * Math.PI;
@@ -692,7 +695,7 @@
   function updateNearbyCircle() {
     const m = getMap();
     if (!m) return;
-    const show = isNearbyPopupOpen() && !!lastPos;
+    const show = nearbyControlsEnabled() && !!lastPos;
     try {
       if (!m.getSource(_NR_SRC)) {
         if (!show) return;
@@ -715,6 +718,7 @@
   }
 
   window.__cdUpdateNearbyControls = function() {
+    updateNearbyCircle();
     if (nearbyControlsEnabled()) return;
     const popup = nearbyPopup;
     nearbyPopup = null;
@@ -735,7 +739,7 @@
     try {
       const features = map.getStyle().sources['locations-data']?.data?.features;
       if (!features) return [];
-      const t = NEARBY_THRESHOLD;
+      const t = _nearbyThreshold();
       return features
         .filter(f => {
           const [lng, lat] = f.geometry.coordinates;
@@ -971,7 +975,7 @@
           updateHeading(msg);
           lastPos = msg;
           if (marker) marker.setLngLat([msg.lng, msg.lat]);
-          if (isNearbyPopupOpen()) updateNearbyCircle();
+          updateNearbyCircle();
           const mm = window.mapManager && window.mapManager.map;
           if (rotateWithCamera) {
             // camera_heading controla bearing e centro nesse modo.
