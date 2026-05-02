@@ -1,4 +1,4 @@
-## v0.04.01
+## v0.05.00
 
-### Fixed
-- Changed nearby popup controller shortcut from LB+A to LB+Down to avoid conflict with the A button used during normal gameplay.
+### Added
+- Visual scan radius circle on the MapGenie map, visible only while the Nearby Locations popup is open, showing exactly which area around the player is being scanned.

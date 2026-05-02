@@ -674,6 +674,41 @@
   // O mapa usa valores aprox. entre -1 e 1; 0.005 equivale a uma área pequena.
   const NEARBY_THRESHOLD = (window.__cdSettings && window.__cdSettings.nearbyThreshold) || 0.005;
   const NEARBY_REFRESH_MS = 500;
+  const _NR_SRC   = 'cd-nearby-radius';
+  const _NR_FILL  = 'cd-nearby-radius-fill';
+  const _NR_LINE  = 'cd-nearby-radius-line';
+
+  function _buildNearbyCircleGeoJSON(lng, lat) {
+    const steps = 64;
+    const r = NEARBY_THRESHOLD;
+    const coords = [];
+    for (let i = 0; i <= steps; i++) {
+      const a = (i / steps) * 2 * Math.PI;
+      coords.push([lng + r * Math.cos(a), lat + r * Math.sin(a)]);
+    }
+    return { type: 'Feature', geometry: { type: 'Polygon', coordinates: [coords] } };
+  }
+
+  function updateNearbyCircle() {
+    const m = getMap();
+    if (!m) return;
+    const show = isNearbyPopupOpen() && !!lastPos;
+    try {
+      if (!m.getSource(_NR_SRC)) {
+        if (!show) return;
+        m.addSource(_NR_SRC, { type: 'geojson', data: { type: 'FeatureCollection', features: [] } });
+        m.addLayer({ id: _NR_FILL, type: 'fill', source: _NR_SRC,
+          paint: { 'fill-color': '#ffd060', 'fill-opacity': 0.15 } });
+        m.addLayer({ id: _NR_LINE, type: 'line', source: _NR_SRC,
+          paint: { 'line-color': '#ffd060', 'line-width': 1.5,
+                   'line-opacity': 0.8, 'line-dasharray': [4, 3] } });
+      }
+      m.getSource(_NR_SRC).setData(
+        show ? _buildNearbyCircleGeoJSON(lastPos.lng, lastPos.lat)
+             : { type: 'FeatureCollection', features: [] }
+      );
+    } catch (_) {}
+  }
 
   function nearbyControlsEnabled() {
     return !!(window.__cdSettings && window.__cdSettings.nearbyControlsEnabled);
@@ -793,7 +828,7 @@
     <div class="footer">
       <span style="margin-right: 5px"><b>↑↓/W/A/up-pad/down-pad</b> Navigate</span>
       <span style="margin-right: 5px"><b>Enter/A-pad</b> Mark</span>
-      <span><b>Esc/B-pad</b> CNlose</span>
+      <span><b>Esc/B-pad</b> Close</span>
     </div>
   </div>
   <script>
@@ -845,6 +880,7 @@
         selectedIndex = Math.min(selectedIndex, Math.max(items.length - 1, 0));
       }
       render();
+      updateNearbyCircle();
     }
 
     function doToggle() {
@@ -865,6 +901,7 @@
       nearbyPopup = null;
       nearbyInputHandler = null;
       if (popup) popup.close();
+      updateNearbyCircle();
     }
 
     nearbyInputHandler = function(action) {
@@ -913,6 +950,7 @@
     }, NEARBY_REFRESH_MS);
 
     render();
+    updateNearbyCircle();
     // Delay para Qt processar a criação da janela antes de focar
     setTimeout(() => { try { if (nearbyPopup && !nearbyPopup.closed) nearbyPopup.focus(); } catch (_) {} }, 150);
   }
@@ -933,6 +971,7 @@
           updateHeading(msg);
           lastPos = msg;
           if (marker) marker.setLngLat([msg.lng, msg.lat]);
+          if (isNearbyPopupOpen()) updateNearbyCircle();
           const mm = window.mapManager && window.mapManager.map;
           if (rotateWithCamera) {
             // camera_heading controla bearing e centro nesse modo.
