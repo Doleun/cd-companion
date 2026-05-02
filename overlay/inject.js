@@ -38,6 +38,7 @@
   let waypointPopup   = null;
   let nearbyPopup     = null;
   let nearbyInputHandler = null;
+  let nearbySelectionActive = false;
   let waypointFilter  = '';
   let calibrationMode = false;
   let hasPreTeleport  = false;
@@ -348,7 +349,7 @@
     const mm = getMap();
     if (!mm) return;
     const view = { bearing: lastCameraHeading, duration: 50 };
-    if (following && !shiftHeld && lastPos) {
+    if (following && !shiftHeld && lastPos && !nearbySelectionActive) {
       view.center = [lastPos.lng, lastPos.lat];
     }
     mm.easeTo(view);
@@ -735,7 +736,11 @@
   const _NR_SRC   = 'cd-nearby-radius';
   const _NR_FILL  = 'cd-nearby-radius-fill';
   const _NR_LINE  = 'cd-nearby-radius-line';
+  const _NS_SRC   = 'cd-nearby-selected';
+  const _NS_FILL  = 'cd-nearby-selected-fill';
+  const _NS_LINE  = 'cd-nearby-selected-line';
   let _nearbyCircleKey = '';
+  let _nearbySelectionKey = '';
 
   function _buildNearbyCircleGeoJSON(lng, lat) {
     const steps = 64;
@@ -774,6 +779,64 @@
     } catch (_) {}
   }
 
+  function _emptyFeatureCollection() {
+    return { type: 'FeatureCollection', features: [] };
+  }
+
+  function _selectedLocationFeature(lng, lat) {
+    return {
+      type: 'Feature',
+      geometry: { type: 'Point', coordinates: [lng, lat] },
+      properties: {}
+    };
+  }
+
+  function updateNearbySelection(item, shouldPan) {
+    const m = getMap();
+    if (!m || !item || typeof item.lng !== 'number' || typeof item.lat !== 'number') {
+      clearNearbySelection(false);
+      return;
+    }
+    const key = `${item.id}:${item.lng.toFixed(6)},${item.lat.toFixed(6)}`;
+    nearbySelectionActive = true;
+    try {
+      if (!m.getSource(_NS_SRC)) {
+        m.addSource(_NS_SRC, { type: 'geojson', data: _emptyFeatureCollection() });
+        m.addLayer({ id: _NS_FILL, type: 'circle', source: _NS_SRC,
+          paint: {
+            'circle-radius': 15,
+            'circle-color': 'rgba(255,40,40,0.18)',
+            'circle-stroke-color': '#ff3838',
+            'circle-stroke-width': 3,
+            'circle-stroke-opacity': 0.95
+          } });
+        m.addLayer({ id: _NS_LINE, type: 'circle', source: _NS_SRC,
+          paint: {
+            'circle-radius': 22,
+            'circle-color': 'rgba(255,40,40,0)',
+            'circle-stroke-color': '#ff3838',
+            'circle-stroke-width': 1.5,
+            'circle-stroke-opacity': 0.6
+          } });
+      }
+      if (key !== _nearbySelectionKey) {
+        m.getSource(_NS_SRC).setData(_selectedLocationFeature(item.lng, item.lat));
+        _nearbySelectionKey = key;
+      }
+      if (shouldPan) pan(item.lng, item.lat);
+    } catch (_) {}
+  }
+
+  function clearNearbySelection(restorePlayer) {
+    const m = getMap();
+    nearbySelectionActive = false;
+    _nearbySelectionKey = '';
+    try {
+      if (m && m.getSource(_NS_SRC)) m.getSource(_NS_SRC).setData(_emptyFeatureCollection());
+    } catch (_) {}
+    if (restorePlayer && lastPos) pan(lastPos.lng, lastPos.lat);
+  }
+
   function nearbyControlsEnabled() {
     return !!(window.__cdSettings && window.__cdSettings.nearbyControlsEnabled);
   }
@@ -784,6 +847,7 @@
     const popup = nearbyPopup;
     nearbyPopup = null;
     nearbyInputHandler = null;
+    clearNearbySelection(true);
     try { if (popup && !popup.closed) popup.close(); } catch (_) {}
   };
 
@@ -812,6 +876,8 @@
             id: String(f.properties.locationId),
             title: details?.title || f.properties.title || `Location ${f.properties.locationId}`,
             found: !!(window.user?.locations?.[f.properties.locationId]),
+            lng,
+            lat,
             dist: Math.sqrt(d2),
             category,
             details
@@ -949,6 +1015,7 @@
         list.innerHTML = '<div class="empty">No location nearby</div>';
         if (hcount) hcount.textContent = '';
         renderDetails(null);
+        clearNearbySelection(false);
         return;
       }
       if (hcount) hcount.textContent = `${items.length} location${items.length !== 1 ? 's' : ''}`;
@@ -962,6 +1029,7 @@
           if (el) { const d = el.querySelector('.item-dist'); if (d) d.textContent = (item.dist * 1000).toFixed(1); }
         });
         renderDetails(items[selectedIndex]);
+        syncSelectedNearby(false);
         return;
       }
       list._fp = fp;
@@ -992,7 +1060,7 @@
           </div>
           <div class="item-dist">${(item.dist * 1000).toFixed(1)}</div>`;
         el.addEventListener('click', () => {
-          selectedIndex = items.findIndex(it => it.id === item.id);
+          selectNearbyIndex(items.findIndex(it => it.id === item.id), true);
           render();
           doToggle();
         });
@@ -1021,6 +1089,23 @@
       const selEl = list.querySelector('.selected');
       if (selEl) selEl.scrollIntoView({ block: 'nearest' });
       renderDetails(items[selectedIndex]);
+      syncSelectedNearby(false);
+    }
+
+    function syncSelectedNearby(shouldPan) {
+      if (!items.length) {
+        clearNearbySelection(false);
+        return;
+      }
+      updateNearbySelection(items[selectedIndex], shouldPan);
+    }
+
+    function selectNearbyIndex(index, shouldPan) {
+      if (!items.length) return;
+      const nextIndex = Math.max(0, Math.min(index, items.length - 1));
+      const changed = nextIndex !== selectedIndex;
+      selectedIndex = nextIndex;
+      if (changed || shouldPan) syncSelectedNearby(shouldPan);
     }
 
     function renderDetails(item) {
@@ -1089,6 +1174,7 @@
       nearbyPopup = null;
       nearbyInputHandler = null;
       if (popup) popup.close();
+      clearNearbySelection(true);
       updateNearbyCircle();
     }
 
@@ -1097,11 +1183,11 @@
         closeNearbyPopup();
       } else if (action === 'down') {
         if (!items.length) return;
-        selectedIndex = Math.min(selectedIndex + 1, items.length - 1);
+        selectNearbyIndex(selectedIndex + 1, true);
         render();
       } else if (action === 'up') {
         if (!items.length) return;
-        selectedIndex = Math.max(selectedIndex - 1, 0);
+        selectNearbyIndex(selectedIndex - 1, true);
         render();
       } else if (action === 'toggle') {
         doToggle();
@@ -1116,12 +1202,12 @@
       if (e.key === 'ArrowDown' || e.key.toLowerCase() === 's') {
         e.preventDefault();
         if (!items.length) return;
-        selectedIndex = Math.min(selectedIndex + 1, items.length - 1);
+        selectNearbyIndex(selectedIndex + 1, true);
         render();
       } else if (e.key === 'ArrowUp' || e.key.toLowerCase() === 'w') {
         e.preventDefault();
         if (!items.length) return;
-        selectedIndex = Math.max(selectedIndex - 1, 0);
+        selectNearbyIndex(selectedIndex - 1, true);
         render();
       } else if (e.key === 'Enter' || e.key === ' ') {
         e.preventDefault();
@@ -1135,6 +1221,7 @@
       if (!isNearbyPopupOpen()) {
         nearbyPopup = null;
         nearbyInputHandler = null;
+        clearNearbySelection(true);
         clearInterval(refreshTimer);
         return;
       }
@@ -1142,6 +1229,7 @@
     }, NEARBY_REFRESH_MS);
 
     render();
+    syncSelectedNearby(true);
     updateNearbyCircle();
     // Delay para Qt processar a criação da janela antes de focar
     setTimeout(() => {
@@ -1174,9 +1262,9 @@
           const mm = window.mapManager && window.mapManager.map;
           if (rotateWithCamera) {
             // camera_heading controla bearing e centro nesse modo.
-          } else if (following && !shiftHeld && rotateWithPlayer && mm) {
+          } else if (following && !shiftHeld && !nearbySelectionActive && rotateWithPlayer && mm) {
             mm.easeTo({ center: [msg.lng, msg.lat], bearing: lastHeading, duration: 150 });
-          } else if (following && !shiftHeld) {
+          } else if (following && !shiftHeld && !nearbySelectionActive) {
             pan(msg.lng, msg.lat);
           }
           updatePanel();
@@ -1252,9 +1340,9 @@
           const mm2 = window.mapManager && window.mapManager.map;
           if (rotateWithCamera) {
             // camera_heading controla bearing e centro nesse modo.
-          } else if (following && !shiftHeld && rotateWithPlayer && mm2) {
+          } else if (following && !shiftHeld && !nearbySelectionActive && rotateWithPlayer && mm2) {
             mm2.easeTo({ center: [msg.lng, msg.lat], bearing: lastHeading, duration: 150 });
-          } else if (following && !shiftHeld) {
+          } else if (following && !shiftHeld && !nearbySelectionActive) {
             pan(msg.lng, msg.lat);
           }
           updatePanel();
