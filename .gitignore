@@ -3,6 +3,9 @@
 /.codebuddy
 __pycache__/
 *.pyc
-/dist/CD_Companion.exe
+/dist
 /overlay/overlay_config.json
 /cd_server.log
+CD_Companion.exe
+/overlay/CD_Companion.exe
+/overlay/cd_server.log
