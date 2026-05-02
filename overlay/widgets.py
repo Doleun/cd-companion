@@ -6,16 +6,54 @@ Contém: SettingsDialog, _PopupWebWindow, _InterceptPage, _LoginPrompt,
 
 import ctypes
 import ctypes.wintypes
+import json
+import os
 
 from PyQt5.QtCore import Qt, QPoint, QTimer, pyqtSignal, QObject
 from PyQt5.QtGui import QKeySequence
 from PyQt5.QtWidgets import (QApplication, QDialog, QVBoxLayout, QHBoxLayout,
                              QLabel, QCheckBox, QPushButton, QSlider,
-                             QMainWindow, QShortcut, QWidget)
+                             QMainWindow, QShortcut, QWidget, QKeySequenceEdit)
 from PyQt5.QtWebEngineWidgets import QWebEngineView, QWebEnginePage
 
 # Importa SETTING_DEFAULTS do módulo de configuração
 from overlay.config_defaults import SETTING_DEFAULTS
+
+try:
+    from server.main import set_nearby_hotkey_paused as _set_nearby_hotkey_paused
+except Exception:
+    _set_nearby_hotkey_paused = None
+
+# ── Hotkey helpers ────────────────────────────────────────────────────
+_SAVE_DIR = os.path.join(os.environ.get('LOCALAPPDATA', ''), 'CD_Teleport')
+_HOTKEY_SETTINGS_FILE = os.path.join(_SAVE_DIR, 'cd_hotkeys.json')
+_OPEN_NEARBY_DEFAULT = {'vk': 0x4E, 'mod': 0x10}  # Shift+N
+
+_VK_MAP = {f'F{i}': 0x6F + i for i in range(1, 13)}
+_VK_MAP.update({chr(c): c for c in range(0x41, 0x5B)})   # A–Z
+_VK_MAP.update({str(d): 0x30 + d for d in range(10)})     # 0–9
+_MOD_MAP  = {'Shift': 0x10, 'Ctrl': 0x11, 'Alt': 0x12}
+_VK_DISP  = {v: k for k, v in _VK_MAP.items()}
+_MOD_DISP = {0x10: 'Shift', 0x11: 'Ctrl', 0x12: 'Alt'}
+
+
+def _vk_to_seq_str(vk, mod):
+    key = _VK_DISP.get(vk, f'VK{vk:#04x}')
+    prefix = f'{_MOD_DISP[mod]}+' if mod in _MOD_DISP else ''
+    return f'{prefix}{key}'
+
+
+def _seq_str_to_vk(seq_str):
+    """'Shift+N' → (vk, mod). Returns None se inválido."""
+    parts = [p.strip() for p in seq_str.split('+')]
+    key = parts[-1]
+    vk = _VK_MAP.get(key.upper() if len(key) == 1 else key)
+    if vk is None:
+        return None
+    mod = 0
+    for m in parts[:-1]:
+        mod = _MOD_MAP.get(m, mod)
+    return vk, mod
 
 
 def _find_process_window(exe_name):
@@ -192,10 +230,85 @@ class SettingsDialog(QDialog):
         option('nearbyControlsEnabled', 'Enable nearby popup shortcuts',
                'Shift+N or LB+Down opens the nearby popup. In the popup: Up/Down, W/S, or D-pad moves, '
                'Enter, Space, or A toggles found, Esc or B closes.')
-        nearby_help = QLabel('Shortcuts: Shift+N / LB+Down open. Up/Down, W/S, or D-pad navigate. Enter/Space/A toggles. Esc/B closes.')
+        nearby_help = QLabel('LB+Down / Shift+N open. Up/Down, W/S, D-pad navigate. Enter/Space/A toggles. Esc/B closes.')
         nearby_help.setWordWrap(True)
         nearby_help.setStyleSheet('color:#7c8db5; font:11px "Segoe UI"; margin-left:26px;')
         layout.addWidget(nearby_help)
+
+        # Scan radius
+        radius_row = QHBoxLayout()
+        radius_row.setSpacing(10)
+        radius_lbl = QLabel('Scan radius')
+        self._nearby_radius_val = QLabel()
+        self._nearby_radius_val.setStyleSheet(
+            "color:#ffd060; font:13px 'Consolas'; min-width:40px;")
+        self._nearby_radius = QSlider(Qt.Horizontal)
+        self._nearby_radius.setRange(3, 8)
+        self._nearby_radius.setSingleStep(1)
+        raw = cfg.get('nearbyThreshold', SETTING_DEFAULTS['nearbyThreshold'])
+        self._nearby_radius.setValue(round(float(raw) * 1000))
+        self._nearby_radius_val.setText(f'{self._nearby_radius.value() / 1000:.3f}')
+        self._nearby_radius.valueChanged.connect(
+            lambda v: self._nearby_radius_val.setText(f'{v / 1000:.3f}'))
+        radius_row.addWidget(radius_lbl)
+        radius_row.addWidget(self._nearby_radius, 1)
+        radius_row.addWidget(self._nearby_radius_val)
+        layout.addLayout(radius_row)
+
+        # Hotkey configurável
+        hk_row = QHBoxLayout()
+        hk_row.setSpacing(10)
+        hk_lbl = QLabel('Open hotkey')
+        self._nearby_hk = QKeySequenceEdit()
+        self._nearby_hk.setFixedHeight(28)
+        self._nearby_hk.setToolTip('Restart overlay for the new hotkey to take effect')
+        # Impede acúmulo de múltiplos atalhos: ao teclar de novo após finalizar, limpa primeiro
+        self._nearby_hk._hk_finalized = False
+
+        def _on_seq_changed(seq):
+            first = seq.toString().split(', ')[0]
+            if first != seq.toString():
+                self._nearby_hk.setKeySequence(QKeySequence(first))
+            self._nearby_hk._hk_finalized = True
+
+        def _hk_key_press(e):
+            if self._nearby_hk._hk_finalized:
+                self._nearby_hk.clear()
+                self._nearby_hk._hk_finalized = False
+            QKeySequenceEdit.keyPressEvent(self._nearby_hk, e)
+
+        self._nearby_hk.keySequenceChanged.connect(_on_seq_changed)
+        self._nearby_hk.keyPressEvent = _hk_key_press
+        # Pausar hotkey enquanto o campo está em foco
+        def _on_hk_focus_in():
+            if _set_nearby_hotkey_paused: _set_nearby_hotkey_paused(True)
+        def _on_hk_focus_out():
+            if _set_nearby_hotkey_paused: _set_nearby_hotkey_paused(False)
+        def _hk_focus_in(e):
+            _on_hk_focus_in()
+            QKeySequenceEdit.focusInEvent(self._nearby_hk, e)
+        def _hk_focus_out(e):
+            _on_hk_focus_out()
+            QKeySequenceEdit.focusOutEvent(self._nearby_hk, e)
+        self._nearby_hk.focusInEvent  = _hk_focus_in
+        self._nearby_hk.focusOutEvent = _hk_focus_out
+        # Carregar binding atual
+        hk_vk  = _OPEN_NEARBY_DEFAULT['vk']
+        hk_mod = _OPEN_NEARBY_DEFAULT['mod']
+        try:
+            with open(_HOTKEY_SETTINGS_FILE, 'r', encoding='utf-8') as _f:
+                _hk_data = json.load(_f).get('open_nearby', {})
+                hk_vk  = _hk_data.get('vk',  hk_vk)
+                hk_mod = _hk_data.get('mod', hk_mod)
+        except Exception:
+            pass
+        self._nearby_hk.setKeySequence(QKeySequence(_vk_to_seq_str(hk_vk, hk_mod)))
+        hk_row.addWidget(hk_lbl)
+        hk_row.addWidget(self._nearby_hk, 1)
+        layout.addLayout(hk_row)
+        hk_note = QLabel('Restart required to apply hotkey change.')
+        hk_note.setStyleSheet('color:#555; font:10px "Segoe UI"; margin-left:0;')
+        layout.addWidget(hk_note)
 
         # Direction arrow
         section('Performance')
@@ -252,7 +365,28 @@ class SettingsDialog(QDialog):
         result['transparency'] = self._slider.value()
         result['centerTeleportY'] = float(self._center_y.value())
         result['headingSource'] = self._heading_combo.currentData()
+        result['nearbyThreshold'] = self._nearby_radius.value() / 1000.0
+        self._save_nearby_hotkey()
         return result
+
+    def _save_nearby_hotkey(self):
+        seq_str = self._nearby_hk.keySequence().toString()
+        parsed = _seq_str_to_vk(seq_str)
+        if parsed is None:
+            return
+        vk, mod = parsed
+        try:
+            try:
+                with open(_HOTKEY_SETTINGS_FILE, 'r', encoding='utf-8') as f:
+                    data = json.load(f)
+            except Exception:
+                data = {}
+            data['open_nearby'] = {'vk': vk, 'mod': mod, 'enabled': True}
+            os.makedirs(os.path.dirname(_HOTKEY_SETTINGS_FILE), exist_ok=True)
+            with open(_HOTKEY_SETTINGS_FILE, 'w', encoding='utf-8') as f:
+                json.dump(data, f, indent=2)
+        except Exception:
+            pass
 
 
 # ── Janelas WebEngine auxiliares ─────────────────────────────────────
@@ -296,6 +430,8 @@ class InterceptPage(QWebEnginePage):
         popup.destroyed.connect(lambda _=None, p=popup: self._forget_popup(p))
         popup.closed_with_pos.connect(lambda pos: setattr(self, '_last_popup_pos', pos))
         popup._page.windowCloseRequested.connect(popup.close)
+        popup._page.geometryChangeRequested.connect(
+            lambda rect, p=popup: p.resize(rect.width(), rect.height()))
         self._position_popup(popup, overlay)
         popup.show()
         QTimer.singleShot(0, lambda: self._activate_popup(popup))

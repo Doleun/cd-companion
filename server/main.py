@@ -493,6 +493,14 @@ async def _handle_client(websocket):
                             await _safe_send(client, bcast)
                     log.info("Location toggle: id=%s found=%s", location_id, found)
 
+            elif action == "pan_location":
+                location_id = cmd.get("locationId")
+                if location_id is not None:
+                    await _broadcast_all(json.dumps({
+                        "type": "pan_location",
+                        "locationId": str(location_id),
+                    }))
+
     except Exception:
         pass
     finally:
@@ -510,6 +518,11 @@ async def _broadcast_status(status: str):
 # ── Hotkey polling thread ────────────────────────────────────────────
 
 _hotkey_loop = None  # referência ao asyncio loop para schedule de ações
+_nearby_hotkey_paused = False  # True enquanto usuário edita o atalho nas Settings
+
+def set_nearby_hotkey_paused(paused: bool):
+    global _nearby_hotkey_paused
+    _nearby_hotkey_paused = paused
 
 def _hotkey_thread():
     """Thread que faz polling de hotkeys globais via GetAsyncKeyState."""
@@ -546,7 +559,7 @@ def _hotkey_thread():
         if nearby_enabled:
             controller_buttons = _controller_buttons(get_xinput_state)
             controller_pressed = bool((controller_buttons & XINPUT_OPEN_NEARBY_MASK) == XINPUT_OPEN_NEARBY_MASK)
-            if controller_pressed and not controller_open_nearby_pressed and _hotkey_loop:
+            if controller_pressed and not controller_open_nearby_pressed and _hotkey_loop and not _nearby_hotkey_paused:
                 _hotkey_loop.call_soon_threadsafe(
                     asyncio.ensure_future, _hotkey_open_nearby())
             controller_open_nearby_pressed = controller_pressed
@@ -570,7 +583,7 @@ def _hotkey_thread():
             if not cfg["enabled"]:
                 key_state[hk_id] = False
                 continue
-            if hk_id == "open_nearby" and not nearby_enabled:
+            if hk_id == "open_nearby" and (not nearby_enabled or _nearby_hotkey_paused):
                 key_state[hk_id] = False
                 continue
 

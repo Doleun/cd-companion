@@ -1,1 +1,1 @@
-Changed nearby popup controller shortcut from LB+A to LB+Down to avoid conflict with the A button used during normal gameplay.
+Nearby popup: icons, found badge, distance sort, details panel with image/description, location-link pan, scan radius circle, configurable radius/hotkey, smoother refresh.

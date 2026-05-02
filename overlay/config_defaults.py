@@ -15,4 +15,5 @@ SETTING_DEFAULTS = {
     'disableGpuVsync':       False,
     'teleportEnabled':       True,
     'nearbyControlsEnabled': False,
+    'nearbyThreshold':       0.005,
 }
