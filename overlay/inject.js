@@ -741,17 +741,20 @@
       if (!features) return [];
       const t = _nearbyThreshold();
       return features
-        .filter(f => {
+        .reduce((acc, f) => {
           const [lng, lat] = f.geometry.coordinates;
           const dx = lng - lastPos.lng, dy = lat - lastPos.lat;
-          return dx * dx + dy * dy <= t * t;
-        })
-        .map(f => ({
-          id: String(f.properties.locationId),
-          title: f.properties.title || `Location ${f.properties.locationId}`,
-          category: f.properties.category_id,
-          found: !!(window.user?.locations?.[f.properties.locationId])
-        }));
+          const d2 = dx * dx + dy * dy;
+          if (d2 <= t * t) acc.push({
+            id: String(f.properties.locationId),
+            title: f.properties.title || `Location ${f.properties.locationId}`,
+            category: f.properties.category_id,
+            found: !!(window.user?.locations?.[f.properties.locationId]),
+            dist: Math.sqrt(d2)
+          });
+          return acc;
+        }, [])
+        .sort((a, b) => a.dist - b.dist);
     } catch (_) { return []; }
   }
 
@@ -817,6 +820,8 @@
       text-overflow:ellipsis;white-space:nowrap}
     .found .item-title{color:#e8e8e8}
     .notfound .item-title{color:#999}
+    .item-dist{font-size:10px;color:#555;flex-shrink:0;min-width:28px;text-align:right}
+    .selected .item-dist{color:#888}
     .footer{padding:5px 12px;border-top:1px solid rgba(255,255,255,.07);
       flex-shrink:0;font-size:10px;color:#444;display:flex;gap:14px}
     .footer b{color:#666}
@@ -857,9 +862,11 @@
       list.innerHTML = items.map((item, i) => {
         const cls = item.found ? 'found' : 'notfound';
         const sel = i === selectedIndex ? ' selected' : '';
+        const distStr = (item.dist * 1000).toFixed(1);
         return `<div class="item ${cls}${sel}" data-idx="${i}">
           <div class="check">${item.found ? '✓' : '○'}</div>
           <div class="item-title" title="${item.title}">${item.title}</div>
+          <div class="item-dist">${distStr}</div>
         </div>`;
       }).join('');
       const sel = list.querySelector('.selected');
