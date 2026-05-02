@@ -205,6 +205,9 @@ def _save_hotkey_settings(hotkeys):
     with open(HOTKEY_SETTINGS_FILE, 'w', encoding='utf-8') as f:
         json.dump(hotkeys, f, indent=2)
 
+def _nearby_controls_enabled():
+    return os.environ.get('CD_NEARBY_CONTROLS_ENABLED', '0') == '1'
+
 CALIBRATION_FILES = {
     "pywel": os.path.join(SAVE_DIR, "cd_calibration_pywel.json"),
     "abyss": os.path.join(SAVE_DIR, "cd_calibration_abyss.json"),
@@ -539,27 +542,35 @@ def _hotkey_thread():
         if not _engine or not _engine.attached or not _engine.hooks_installed:
             continue
 
-        controller_buttons = _controller_buttons(get_xinput_state)
-        controller_pressed = bool((controller_buttons & XINPUT_OPEN_NEARBY_MASK) == XINPUT_OPEN_NEARBY_MASK)
-        if controller_pressed and not controller_open_nearby_pressed and _hotkey_loop:
-            _hotkey_loop.call_soon_threadsafe(
-                asyncio.ensure_future, _hotkey_open_nearby())
-        controller_open_nearby_pressed = controller_pressed
-
-        for button_mask, action in XINPUT_NEARBY_INPUTS.items():
-            pressed = bool(controller_buttons & button_mask)
-            was_pressed = controller_button_state.get(button_mask, False)
-            controller_button_state[button_mask] = pressed
-            if not pressed or was_pressed:
-                continue
-            if button_mask == XINPUT_GAMEPAD_A and controller_buttons & XINPUT_GAMEPAD_LEFT_SHOULDER:
-                continue
-            if _hotkey_loop:
+        nearby_enabled = _nearby_controls_enabled()
+        if nearby_enabled:
+            controller_buttons = _controller_buttons(get_xinput_state)
+            controller_pressed = bool((controller_buttons & XINPUT_OPEN_NEARBY_MASK) == XINPUT_OPEN_NEARBY_MASK)
+            if controller_pressed and not controller_open_nearby_pressed and _hotkey_loop:
                 _hotkey_loop.call_soon_threadsafe(
-                    asyncio.ensure_future, _hotkey_nearby_input(action))
+                    asyncio.ensure_future, _hotkey_open_nearby())
+            controller_open_nearby_pressed = controller_pressed
+
+            for button_mask, action in XINPUT_NEARBY_INPUTS.items():
+                pressed = bool(controller_buttons & button_mask)
+                was_pressed = controller_button_state.get(button_mask, False)
+                controller_button_state[button_mask] = pressed
+                if not pressed or was_pressed:
+                    continue
+                if button_mask == XINPUT_GAMEPAD_A and controller_buttons & XINPUT_GAMEPAD_LEFT_SHOULDER:
+                    continue
+                if _hotkey_loop:
+                    _hotkey_loop.call_soon_threadsafe(
+                        asyncio.ensure_future, _hotkey_nearby_input(action))
+        else:
+            controller_open_nearby_pressed = False
+            controller_button_state.clear()
 
         for hk_id, cfg in hotkeys.items():
             if not cfg["enabled"]:
+                key_state[hk_id] = False
+                continue
+            if hk_id == "open_nearby" and not nearby_enabled:
                 key_state[hk_id] = False
                 continue
 

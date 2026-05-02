@@ -188,6 +188,15 @@ class SettingsDialog(QDialog):
         center_y_row.addWidget(self._center_y_value)
         layout.addLayout(center_y_row)
 
+        section('Nearby')
+        option('nearbyControlsEnabled', 'Enable nearby popup shortcuts',
+               'Shift+N or LB+A opens the nearby popup. In the popup: Up/Down or D-pad moves, '
+               'Enter or A toggles found, Esc or B closes.')
+        nearby_help = QLabel('Shortcuts: Shift+N / LB+A open. Up/Down or D-pad navigate. Enter/A toggles. Esc/B closes.')
+        nearby_help.setWordWrap(True)
+        nearby_help.setStyleSheet('color:#7c8db5; font:11px "Segoe UI"; margin-left:26px;')
+        layout.addWidget(nearby_help)
+
         # Direction arrow
         section('Performance')
         option('disableGpuVsync', 'Disable GPU vsync (multi-monitor fix)',

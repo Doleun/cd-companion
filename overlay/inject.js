@@ -675,6 +675,18 @@
   const NEARBY_THRESHOLD = (window.__cdSettings && window.__cdSettings.nearbyThreshold) || 0.005;
   const NEARBY_REFRESH_MS = 500;
 
+  function nearbyControlsEnabled() {
+    return !!(window.__cdSettings && window.__cdSettings.nearbyControlsEnabled);
+  }
+
+  window.__cdUpdateNearbyControls = function() {
+    if (nearbyControlsEnabled()) return;
+    const popup = nearbyPopup;
+    nearbyPopup = null;
+    nearbyInputHandler = null;
+    try { if (popup && !popup.closed) popup.close(); } catch (_) {}
+  };
+
   function getNearbyLocations() {
     if (!lastPos || !map) return [];
     try {
@@ -711,6 +723,7 @@
   };
 
   function openNearbyPopup() {
+    if (!nearbyControlsEnabled()) return;
     if (nearbyPopup) {
       closeNearbyPopup();
       return;
@@ -952,10 +965,10 @@
           _onLocationToggle(msg.locationId, msg.found);
 
         } else if (msg.type === 'open_nearby') {
-          openNearbyPopup();
+          if (nearbyControlsEnabled()) openNearbyPopup();
 
         } else if (msg.type === 'nearby_input') {
-          if (nearbyInputHandler) nearbyInputHandler(msg.action);
+          if (nearbyControlsEnabled() && nearbyInputHandler) nearbyInputHandler(msg.action);
 
         } else if (msg.type === 'map_marker') {
           mapDestLng = msg.lng;

@@ -449,6 +449,7 @@ class OverlayWindow(QMainWindow):
             new_settings = dlg.get_settings()
             cfg.update(new_settings)
             save_config(cfg)
+            os.environ['CD_NEARBY_CONTROLS_ENABLED'] = '1' if new_settings.get('nearbyControlsEnabled') else '0'
             was_round = self._round_window
             self._round_window = new_settings.get('roundWindow', False)
             if self._round_window and not was_round:
@@ -481,6 +482,7 @@ class OverlayWindow(QMainWindow):
             f'window.__cdSettings = {json.dumps(settings)};'
             f'window.__cdApplyRoundLayout && window.__cdApplyRoundLayout(window.__cdSettings);'
             f'window.__cdApplyRotationSettings && window.__cdApplyRotationSettings(window.__cdSettings);'
+            f'window.__cdUpdateNearbyControls && window.__cdUpdateNearbyControls();'
             f'window.__cdUpdateTeleportVisibility && window.__cdUpdateTeleportVisibility();')
 
     def _on_load_finished(self, ok):
@@ -561,6 +563,7 @@ def main():
     cfg = load_config()
     if not cfg.get('teleportEnabled', True):
         os.environ['CD_TELEPORT_ENABLED'] = '0'
+    os.environ['CD_NEARBY_CONTROLS_ENABLED'] = '1' if cfg.get('nearbyControlsEnabled', False) else '0'
 
     # ── Checagem de admin e dependências (antes de qualquer coisa) ────
     from server.main import assert_admin, _check_dependencies
