@@ -19,6 +19,11 @@ from PyQt5.QtWebEngineWidgets import QWebEngineView, QWebEnginePage
 # Importa SETTING_DEFAULTS do módulo de configuração
 from overlay.config_defaults import SETTING_DEFAULTS
 
+try:
+    from server.main import set_nearby_hotkey_paused as _set_nearby_hotkey_paused
+except Exception:
+    _set_nearby_hotkey_paused = None
+
 # ── Hotkey helpers ────────────────────────────────────────────────────
 _SAVE_DIR = os.path.join(os.environ.get('LOCALAPPDATA', ''), 'CD_Teleport')
 _HOTKEY_SETTINGS_FILE = os.path.join(_SAVE_DIR, 'cd_hotkeys.json')
@@ -255,12 +260,38 @@ class SettingsDialog(QDialog):
         hk_row.setSpacing(10)
         hk_lbl = QLabel('Open hotkey')
         self._nearby_hk = QKeySequenceEdit()
-        try:
-            self._nearby_hk.setMaximumSequenceLength(1)
-        except AttributeError:
-            pass
         self._nearby_hk.setFixedHeight(28)
         self._nearby_hk.setToolTip('Restart overlay for the new hotkey to take effect')
+        # Impede acúmulo de múltiplos atalhos: ao teclar de novo após finalizar, limpa primeiro
+        self._nearby_hk._hk_finalized = False
+
+        def _on_seq_changed(seq):
+            first = seq.toString().split(', ')[0]
+            if first != seq.toString():
+                self._nearby_hk.setKeySequence(QKeySequence(first))
+            self._nearby_hk._hk_finalized = True
+
+        def _hk_key_press(e):
+            if self._nearby_hk._hk_finalized:
+                self._nearby_hk.clear()
+                self._nearby_hk._hk_finalized = False
+            QKeySequenceEdit.keyPressEvent(self._nearby_hk, e)
+
+        self._nearby_hk.keySequenceChanged.connect(_on_seq_changed)
+        self._nearby_hk.keyPressEvent = _hk_key_press
+        # Pausar hotkey enquanto o campo está em foco
+        def _on_hk_focus_in():
+            if _set_nearby_hotkey_paused: _set_nearby_hotkey_paused(True)
+        def _on_hk_focus_out():
+            if _set_nearby_hotkey_paused: _set_nearby_hotkey_paused(False)
+        def _hk_focus_in(e):
+            _on_hk_focus_in()
+            QKeySequenceEdit.focusInEvent(self._nearby_hk, e)
+        def _hk_focus_out(e):
+            _on_hk_focus_out()
+            QKeySequenceEdit.focusOutEvent(self._nearby_hk, e)
+        self._nearby_hk.focusInEvent  = _hk_focus_in
+        self._nearby_hk.focusOutEvent = _hk_focus_out
         # Carregar binding atual
         hk_vk  = _OPEN_NEARBY_DEFAULT['vk']
         hk_mod = _OPEN_NEARBY_DEFAULT['mod']
