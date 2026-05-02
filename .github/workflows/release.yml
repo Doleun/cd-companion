@@ -38,7 +38,14 @@ jobs:
 
       - name: Package source zip
         run: |
-          $items = Get-ChildItem -Path . -Exclude dist,build,__pycache__,'*.spec' | Select-Object -ExpandProperty FullName
+          $items = Get-ChildItem -Path . -Recurse -File |
+            Where-Object {
+              $_.FullName -notmatch '\\(dist|build|__pycache__)\\' -and
+              $_.FullName -notmatch '\\.github\\' -and
+              $_.Name -ne '.gitignore' -and
+              $_.Name -notlike '*.spec'
+            } |
+            Select-Object -ExpandProperty FullName
           Compress-Archive -Path $items -DestinationPath dist/CD_Companion_source_${{ github.ref_name }}.zip -Force
 
       - name: Upload Release Asset
