@@ -673,6 +673,18 @@
   // Threshold em coordenadas lng/lat do Mapbox — ajustar conforme necessário.
   // O mapa usa valores aprox. entre -1 e 1; 0.005 equivale a uma área pequena.
   const NEARBY_REFRESH_MS = 500;
+  let _catCache = null;
+  function _getCategoryName(id) {
+    if (!_catCache) {
+      _catCache = {};
+      try {
+        for (const g of window.mapData?.groups || [])
+          for (const c of g.categories || [])
+            _catCache[String(c.id)] = { title: c.title, icon: c.icon || '' };
+      } catch (_) {}
+    }
+    return _catCache[String(id)] || null;  // { title, icon }
+  }
   function _nearbyThreshold() {
     const v = window.__cdSettings && window.__cdSettings.nearbyThreshold;
     return (typeof v === 'number' && v > 0) ? v : 0.005;
@@ -750,7 +762,8 @@
             title: f.properties.title || `Location ${f.properties.locationId}`,
             category: f.properties.category_id,
             found: !!(window.user?.locations?.[f.properties.locationId]),
-            dist: Math.sqrt(d2)
+            dist: Math.sqrt(d2),
+            category: _getCategoryName(f.properties.category_id)
           });
           return acc;
         }, [])
@@ -789,12 +802,14 @@
 
     let selectedIndex = 0;
     const doc = nearbyPopup.document;
+    const _iconCssHref = document.head.querySelector('link[href*="crimson-desert-icons"]')?.href || '';
     doc.open();
     doc.write(`<!doctype html>
 <html>
 <head>
   <meta charset="utf-8">
   <title>Nearby Locations</title>
+  ${_iconCssHref ? `<link rel="stylesheet" href="${_iconCssHref}">` : ''}
   <style>
     html,body{margin:0;width:100%;height:100%;overflow:hidden;
       background:#0f0f1a;color:#e8e8e8;
@@ -816,11 +831,18 @@
     .check{font-size:14px;width:18px;flex-shrink:0;text-align:center}
     .found .check{color:#60e890}
     .notfound .check{color:#444}
-    .item-title{flex:1;font-size:12px;overflow:hidden;
-      text-overflow:ellipsis;white-space:nowrap}
+    .item-name{flex:1;overflow:hidden;display:flex;flex-direction:column;gap:2px}
+    .item-icon-wrap{position:relative;width:36px;height:36px;flex-shrink:0;align-self:center;display:flex;align-items:center;justify-content:center;overflow:visible}
+    .item-icon-wrap .icon{transform:scale(1.8);transform-origin:center}
+    .item-badge{position:absolute;bottom:3px;right:6px;width:14px;height:14px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:9px;font-weight:bold;line-height:1;border:1.5px solid #0f0f1a}
+    .found .item-badge{background:rgba(96,232,144,.95);color:#0a1a0a}
+    .notfound .item-badge{background:rgba(20,20,30,.9);color:#555;border-color:#333}
+    .item-title{font-size:12px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
     .found .item-title{color:#e8e8e8}
     .notfound .item-title{color:#999}
-    .item-dist{font-size:10px;color:#555;flex-shrink:0;min-width:28px;text-align:right}
+    .item-cat{font-size:10px;color:#4a5568;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+    .selected .item-cat{color:#718096}
+    .item-dist{font-size:10px;color:#555;flex-shrink:0;min-width:28px;text-align:right;align-self:center}
     .selected .item-dist{color:#888}
     .footer{padding:5px 12px;border-top:1px solid rgba(255,255,255,.07);
       flex-shrink:0;font-size:10px;color:#444;display:flex;gap:14px}
@@ -863,9 +885,18 @@
         const cls = item.found ? 'found' : 'notfound';
         const sel = i === selectedIndex ? ' selected' : '';
         const distStr = (item.dist * 1000).toFixed(1);
+        const cat = item.category;
+        const badge = `<span class="item-badge">${item.found ? '✓' : '○'}</span>`;
+        const iconHtml = cat?.icon
+          ? `<div class="item-icon-wrap"><span class="icon icon-${cat.icon}"></span>${badge}</div>`
+          : '';
+        const catHtml  = cat ? `<div class="item-cat">${cat.title}</div>` : '';
         return `<div class="item ${cls}${sel}" data-idx="${i}">
-          <div class="check">${item.found ? '✓' : '○'}</div>
-          <div class="item-title" title="${item.title}">${item.title}</div>
+          ${iconHtml || `<div class="check">${item.found ? '✓' : '○'}</div>`}
+          <div class="item-name">
+            <div class="item-title" title="${item.title}">${item.title}</div>
+            ${catHtml}
+          </div>
           <div class="item-dist">${distStr}</div>
         </div>`;
       }).join('');

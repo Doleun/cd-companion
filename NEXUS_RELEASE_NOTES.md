@@ -1,1 +1,1 @@
-Added a visual scan radius circle on the map that appears around the player arrow while the Nearby Locations popup is open, making it clear which area is being scanned.
+Nearby popup overhaul: category icons with found/unfound badge, sorted by distance, scan radius circle on map, configurable radius and hotkey in Settings.
