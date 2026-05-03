@@ -137,6 +137,7 @@ class TeleportEngine:
         self._trampolines = []
         self._far_mode = False
         self._hook_e_predecessor = 0  # trampoline de outro mod hookado no mesmo ponto (ex: OpenFlight)
+        self._hook_e_predecessor_patch_size = 0  # 0, 5 (safetyhook), ou 7 (OpenFlight/companion)
 
     def attach(self):
         if self.pm or self.attached or self.orig_bytes or self.block:
@@ -177,6 +178,7 @@ class TeleportEngine:
         self._trampolines.clear()
         self._far_mode = False
         self._hook_e_predecessor = 0
+        self._hook_e_predecessor_patch_size = 0
         self.hooks_installed = False
 
     def detach(self):
@@ -236,7 +238,11 @@ class TeleportEngine:
         return b''
 
     def _remember_orig_bytes(self, hook_addr):
-        current = self.pm.read_bytes(hook_addr, self.HOOK_PATCH_SIZE)
+        patch_size = self.HOOK_PATCH_SIZE
+        # Predecessor de 5 bytes (safetyhook/Freedom Flyer): salva e restaura 5 bytes.
+        if hook_addr == self.hook_e and self._hook_e_predecessor_patch_size == 5:
+            patch_size = 5
+        current = self.pm.read_bytes(hook_addr, patch_size)
         if hook_addr == self.hook_e and self._hook_e_predecessor:
             # Predecessor detectado: salva o JMP do outro mod para restaurar corretamente no detach.
             self.orig_bytes[hook_addr] = current
@@ -402,7 +408,24 @@ class TeleportEngine:
                     try:
                         self.pm.read_bytes(candidate, 1)
                         self._hook_e_predecessor = candidate
-                        log.info("Existing hook detected at hook_e — will chain through predecessor trampoline (+8)")
+                        # Detectar tamanho do patch do predecessor lendo o trampoline.
+                        # safetyhook (Freedom Flyer) usa patch de 5 bytes → trampoline[0:5] == orig[0:5].
+                        # OpenFlight / companion stale usam patch de 7 bytes → trampoline[0:7] == orig.
+                        try:
+                            tramp_header = self.pm.read_bytes(candidate, 7)
+                            if tramp_header[:5] == self.ORIG_HOOK_E[:5]:
+                                if tramp_header == self.ORIG_HOOK_E:
+                                    self._hook_e_predecessor_patch_size = 7
+                                    log.info("Existing hook detected at hook_e — will chain through predecessor trampoline (+8)")
+                                else:
+                                    self._hook_e_predecessor_patch_size = 5
+                                    log.info("Existing hook detected at hook_e (5-byte patch, safetyhook) — will chain through predecessor trampoline (+5)")
+                            else:
+                                self._hook_e_predecessor_patch_size = 7
+                                log.info("Existing hook detected at hook_e — will chain through predecessor trampoline (+8)")
+                        except Exception:
+                            self._hook_e_predecessor_patch_size = 7
+                            log.info("Existing hook detected at hook_e — will chain through predecessor trampoline (+8)")
                     except Exception:
                         self._hook_e_predecessor = 0
                         log.info("Stale JMP at hook_e (previous companion session without clean detach) — will overwrite")
@@ -616,9 +639,17 @@ class TeleportEngine:
         """
         tp  = self.tp
         xyz = self.xyz_addr[0]   # static global X (Y=+4, Z=+8, consecutivos)
-        # Se outro mod (ex: OpenFlight) já hookou este ponto, encadeia para o trampoline
-        # dele pulando os 8 bytes iniciais (que re-executam os bytes originais).
-        # Caso contrário, retorna direto para hook_e+8 (addps xmm0,[r13]).
+
+        # Predecessor com patch de 5 bytes (safetyhook / Freedom Flyer):
+        # trampoline preserva só 5 bytes originais → flag=0 pula bytes originais
+        # e faz JMP direto para o predecessor; flag=1/2 executa todos os 8 bytes
+        # originais na cave e faz JMP para hook_e+8 (skip do predecessor por 1 frame).
+        if self._hook_e_predecessor and self._hook_e_predecessor_patch_size == 5:
+            return self._build_cave_e_pred5(tp, xyz)
+
+        # Sem predecessor, ou predecessor com patch de 7 bytes (OpenFlight):
+        # cave executa os 8 bytes originais e retorna para predecessor+8 (se houver)
+        # ou hook_e+8 (sem predecessor).
         if self._hook_e_predecessor:
             ret = self._hook_e_predecessor + 8
         else:
@@ -671,6 +702,66 @@ class TeleportEngine:
         c += self._abs_jmp(ret)
         return bytes(c)
 
+    def _build_cave_e_pred5(self, tp, xyz):
+        """Cave para predecessor com patch de 5 bytes (safetyhook / Freedom Flyer).
+
+        Diferente do path normal:
+        - flag=0 → NÃO executa bytes originais, faz JMP direto para o predecessor.
+          O safetyhook executa os 5 bytes originais + handler do FF.
+        - flag=1/2 → Executa TODOS os 8 bytes originais na cave, aplica delta,
+          e faz JMP para hook_e+8 (pula o predecessor por 1 frame — imperceptível).
+        """
+        ret = self.hook_e + 8
+        c = bytearray()
+
+        # Salvar RBX (physics entity) em tp+0x28
+        c += b'\x50'                                   # push rax
+        c += b'\x48\xB8' + struct.pack('<Q', tp)        # mov rax, tp_addr
+        c += b'\x48\x89\x58\x28'                       # mov [rax+0x28], rbx  (save physics entity)
+
+        # Verificar flag != 0
+        c += b'\x83\x78\x10\x00'                       # cmp dword [rax+16], 0
+        je_done_no_orig_pos = len(c)
+        c += b'\x74\x00'                               # je .done_no_orig (placeholder)
+
+        # ── flag != 0: executar bytes originais (não executados pelo pred-5) ──
+        c += b'\x0F\x28\xC6'                           # movaps xmm0, xmm6
+        c += b'\xF3\x45\x0F\x5C\xC8'                   # subss  xmm9, xmm8
+
+        # Verificar flag=2 (move mode)
+        c += b'\x83\x78\x10\x02'                       # cmp dword [rax+16], 2
+        je_move_pos = len(c)
+        c += b'\x74\x00'                               # je .move (placeholder)
+
+        # ── TELEPORT (flag=1): xmm0 = target_static - current_static ──
+        c += b'\x0F\x11\x48\x18'                       # movups [rax+24], xmm1  (save)
+        c += b'\x0F\x10\x00'                           # movups xmm0, [rax]     target
+        c += b'\x51'                                   # push rcx
+        c += b'\x48\xB9' + struct.pack('<Q', xyz)       # mov rcx, xyz_addr
+        c += b'\x0F\x10\x09'                           # movups xmm1, [rcx]     current static
+        c += b'\x59'                                   # pop rcx
+        c += b'\x0F\x5C\xC1'                           # subps  xmm0, xmm1
+        c += b'\x0F\x10\x48\x18'                       # movups xmm1, [rax+24]  (restore)
+        jmp_clear_pos = len(c)
+        c += b'\xEB\x00'                               # jmp .clear_skip_pred (placeholder)
+
+        # ── MOVE (flag=2): xmm0 = delta directo ────────────────────────
+        c[je_move_pos + 1] = len(c) - (je_move_pos + 2)
+        c += b'\x0F\x10\x00'                           # movups xmm0, [rax]
+
+        # ── CLEAR FLAG + return to hook_e+8 (skip predecessor) ──────────
+        c[jmp_clear_pos + 1] = len(c) - (jmp_clear_pos + 2)
+        c += b'\xC7\x40\x10\x00\x00\x00\x00'           # mov dword [rax+16], 0
+        c += b'\x58'                                   # pop rax
+        c += self._abs_jmp(ret)                        # JMP hook_e+8
+
+        # ── .done_no_orig (flag=0): pop rax, JMP predecessor ────────────
+        c[je_done_no_orig_pos + 1] = len(c) - (je_done_no_orig_pos + 2)
+        c += b'\x58'                                   # pop rax
+        c += self._abs_jmp(self._hook_e_predecessor)    # JMP predecessor (FF trampoline)
+
+        return bytes(c)
+
     def _build_cave_cam(self):
         """Hook em vmovss [r15+0x4A4],xmm2 (heading da câmera em graus assinados).
         Salva xmm2 em OFF_CAM_YAW e executa instrução original.
@@ -710,14 +801,15 @@ class TeleportEngine:
                 code = builder()
                 self.pm.write_bytes(self.block + off, code, len(code))
 
-        # Hooks padrão — patch de 7 bytes
+        # Hooks padrão — patch de 7 bytes (hook_e usa 5 bytes quando predecessor é safetyhook)
         hooks7 = [
             (self.hook_a, self.block + self.OFF_CA),
             (self.hook_b, self.block + self.OFF_CB),
             (self.hook_c, self.block + self.OFF_CC),
             (self.hook_d, self.block + self.OFF_CD),
-            (self.hook_e, self.block + self.OFF_CE),
         ]
+        if not self._hook_e_predecessor or self._hook_e_predecessor_patch_size != 5:
+            hooks7.append((self.hook_e, self.block + self.OFF_CE))
 
         if not self._far_mode:
             for hook_addr, cave_addr in hooks7:
@@ -725,6 +817,11 @@ class TeleportEngine:
                     continue
                 self._remember_orig_bytes(hook_addr)
                 self.pm.write_bytes(hook_addr, self._jmp_patch(hook_addr, cave_addr), 7)
+            # hook_e com predecessor de 5 bytes (safetyhook / Freedom Flyer)
+            if self.hook_e and self._hook_e_predecessor and self._hook_e_predecessor_patch_size == 5:
+                self._remember_orig_bytes(self.hook_e)
+                self.pm.write_bytes(self.hook_e,
+                    self._jmp_patch5(self.hook_e, self.block + self.OFF_CE), 5)
             # Camera hook — patch de 9 bytes (instrução vmovss [r15+0x4A4],xmm2)
             if self.hook_cam:
                 orig = self.pm.read_bytes(self.hook_cam, 9)
@@ -744,6 +841,15 @@ class TeleportEngine:
                 self.pm.write_bytes(tramp, self._abs_jmp(cave_addr), 14)
                 self._remember_orig_bytes(hook_addr)
                 self.pm.write_bytes(hook_addr, self._jmp_patch(hook_addr, tramp), 7)
+            # hook_e far mode com predecessor de 5 bytes (safetyhook / Freedom Flyer)
+            if self.hook_e and self._hook_e_predecessor and self._hook_e_predecessor_patch_size == 5:
+                tramp = self._alloc_near(handle, self.hook_e, 64)
+                if tramp:
+                    self._trampolines.append(tramp)
+                    self.pm.write_bytes(tramp, self._abs_jmp(self.block + self.OFF_CE), 14)
+                    self._remember_orig_bytes(self.hook_e)
+                    self.pm.write_bytes(self.hook_e,
+                        self._jmp_patch5(self.hook_e, tramp), 5)
             # Camera hook far mode — 9-byte jmp via trampoline
             if self.hook_cam:
                 tramp = self._alloc_near(handle, self.hook_cam, 64)
