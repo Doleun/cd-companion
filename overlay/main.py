@@ -176,6 +176,7 @@ class OverlayWindow(QMainWindow):
         transp = cfg.get('transparency', SETTING_DEFAULTS['transparency'])
         self.setWindowOpacity(1.0 - transp / 100)
         self._round_window = cfg.get('roundWindow', SETTING_DEFAULTS['roundWindow'])
+        self._always_show_bar = cfg.get('alwaysShowTitleBar', SETTING_DEFAULTS['alwaysShowTitleBar'])
         self._is_maximized = False
         self._normal_geometry = None
 
@@ -195,6 +196,10 @@ class OverlayWindow(QMainWindow):
         self._bar = TitleBar(root)
         self._bar.hide()
         self._bar_visible = False
+        if self._always_show_bar and not self._round_window:
+            self._bar.show()
+            self._bar.raise_()
+            self._bar_visible = True
 
         # ── Botões flutuantes individuais (modo circular) ──────────────
         self._create_float_btns(root)
@@ -345,7 +350,7 @@ class OverlayWindow(QMainWindow):
                 self._bar.raise_()
                 self._bar_visible = True
         else:
-            if not inside_w or ly > hide_zone or ly < 0:
+            if not self._always_show_bar and (not inside_w or ly > hide_zone or ly < 0):
                 self._bar.hide()
                 self._bar_visible = False
 
@@ -475,17 +480,33 @@ class OverlayWindow(QMainWindow):
         if dlg.exec_() == QDialog.Accepted:
             new_settings = dlg.get_settings()
             cfg.update(new_settings)
-            save_config(cfg)
             os.environ['CD_NEARBY_CONTROLS_ENABLED'] = '1' if new_settings.get('nearbyControlsEnabled') else '0'
             was_round = self._round_window
             self._round_window = new_settings.get('roundWindow', False)
+            self._always_show_bar = new_settings.get('alwaysShowTitleBar', False)
+            if not self._round_window:
+                if self._always_show_bar and not self._bar_visible:
+                    self._bar.show()
+                    self._bar.raise_()
+                    self._bar_visible = True
+                elif not self._always_show_bar and self._bar_visible:
+                    self._bar.hide()
+                    self._bar_visible = False
             if self._round_window and not was_round:
+                # Indo para circular: salva geometria atual antes do resize
+                cfg['squareWidth'] = self.width()
+                cfg['squareHeight'] = self.height()
+                self._bar.hide()
+                self._bar_visible = False
                 self.resize(240, 240)   # resizeEvent aplica máscara e barra
             else:
                 self._apply_mask()
                 self._update_bar_geometry()
             if not self._round_window and was_round:
-                # Saindo do modo circular: oculta botões flutuantes
+                # Saindo do modo circular: restaura geometria quadrada
+                square_w = cfg.get('squareWidth', DEFAULT_W)
+                square_h = cfg.get('squareHeight', DEFAULT_H)
+                self.resize(square_w, square_h)
                 for btn in self._float_btns:
                     btn.hide()
                 self._float_btns_visible = False
@@ -500,6 +521,7 @@ class OverlayWindow(QMainWindow):
                 self._follow_timer.start()
             else:
                 self._follow_timer.stop()
+            save_config(cfg)
             self._apply_settings_js(new_settings)
 
     def _apply_settings_js(self, settings):

@@ -268,6 +268,8 @@ class SettingsDialog(QDialog):
                'Applies an elliptical mask to the window')
         option('followGameWindow', 'Follow game window',
                'Moves the overlay automatically when the game window is moved')
+        option('alwaysShowTitleBar', 'Always show title bar',
+               'Keeps the title bar always visible instead of showing only on mouse hover (square mode only)')
 
         # Transparência
         transp_val = QLabel(f'{cfg.get("transparency", SETTING_DEFAULTS["transparency"])}%')

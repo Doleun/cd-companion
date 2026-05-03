@@ -8,6 +8,7 @@ SETTING_DEFAULTS = {
     'transparency':         0,      # 0–90 %
     'roundWindow':          False,
     'followGameWindow':     False,
+    'alwaysShowTitleBar':   False,
     'headingSource':        'auto', # 'auto'|'entity'|'delta'
     'rotateWithPlayer':     False,
     'rotateWithCamera':     False,
