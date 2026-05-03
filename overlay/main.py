@@ -176,6 +176,8 @@ class OverlayWindow(QMainWindow):
         transp = cfg.get('transparency', SETTING_DEFAULTS['transparency'])
         self.setWindowOpacity(1.0 - transp / 100)
         self._round_window = cfg.get('roundWindow', SETTING_DEFAULTS['roundWindow'])
+        self._is_maximized = False
+        self._normal_geometry = None
 
         # ── Widget raiz (sem layout — posicionamento manual) ───────────
         root = QWidget()
@@ -205,6 +207,7 @@ class OverlayWindow(QMainWindow):
         self._bar.btn_back.clicked.connect(self._view.back)
         self._bar.btn_settings.clicked.connect(self._open_settings)
         self._bar.btn_hide.clicked.connect(self.hide)
+        self._bar.btn_maximize.clicked.connect(self.toggle_maximize)
         self._bar.btn_close.clicked.connect(self.close)
 
         # Página customizada para interceptar cdcompanion://login-needed
@@ -253,6 +256,8 @@ class OverlayWindow(QMainWindow):
         p.setPen(Qt.NoPen)
         if getattr(self, '_round_window', False):
             p.drawEllipse(0, 0, self.width(), self.height())
+        elif getattr(self, '_is_maximized', False):
+            p.drawRect(0, 0, self.width(), self.height())
         else:
             p.drawRoundedRect(0, 0, self.width(), self.height(),
                               self.CORNER_RADIUS, self.CORNER_RADIUS)
@@ -269,11 +274,26 @@ class OverlayWindow(QMainWindow):
             self._resize_save_timer.start()
 
     def _save_size(self):
+        if self._is_maximized:
+            return
         cfg = load_config()
         w = self.width()
         cfg['width']  = w
         cfg['height'] = w if self._round_window else self.height()
         save_config(cfg)
+
+    def toggle_maximize(self):
+        if self._is_maximized:
+            if self._normal_geometry:
+                self.setGeometry(self._normal_geometry)
+            self._is_maximized = False
+            self._bar.set_maximized(False)
+        else:
+            self._normal_geometry = self.geometry()
+            screen = QApplication.screenAt(self.geometry().center()) or QApplication.primaryScreen()
+            self.setGeometry(screen.availableGeometry())
+            self._is_maximized = True
+            self._bar.set_maximized(True)
 
     # ── Barra: geometria e zonas de hover ─────────────────────────────
     _BAR_SHOW_ZONE = TitleBar.HEIGHT

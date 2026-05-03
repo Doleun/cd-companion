@@ -712,6 +712,7 @@ QPushButton { background:transparent; border:none;
             QPushButton:hover#btn_back     { color:#aaa; }
             QPushButton:hover#btn_settings { color:#ffd060; }
             QPushButton:hover#btn_hide     { color:#60b4ff; }
+            QPushButton:hover#btn_maximize { color:#aaffaa; }
             QPushButton:hover#btn_close    { color:#ff6060; }
         """)
 
@@ -735,11 +736,26 @@ QPushButton { background:transparent; border:none;
         self.btn_back     = icon_btn('btn_back',     '◀', 'Back')
         self.btn_settings = icon_btn('btn_settings', '⚙', 'Settings')
         self.btn_hide     = icon_btn('btn_hide',     '–', 'Hide  (Ctrl+Shift+M)')
+        self.btn_maximize = icon_btn('btn_maximize', '□', 'Maximize')
         self.btn_close    = icon_btn('btn_close',    '✕', 'Close')
 
     def set_compact(self, compact):
         self._lbl.setVisible(not compact)
         self.btn_back.setVisible(not compact)
+
+    def set_maximized(self, maximized):
+        if maximized:
+            self.btn_maximize.setText('❐')
+            self.btn_maximize.setToolTip('Restore')
+        else:
+            self.btn_maximize.setText('□')
+            self.btn_maximize.setToolTip('Maximize')
+
+    def mouseDoubleClickEvent(self, e):
+        if e.button() == Qt.LeftButton:
+            win = self.window()
+            if hasattr(win, 'toggle_maximize') and not getattr(win, '_round_window', True):
+                win.toggle_maximize()
 
     def mousePressEvent(self, e):
         if e.button() == Qt.LeftButton:
