@@ -1,4 +1,4 @@
-## v0.05.02
+## v0.06.00
 
 ### Added
 - Nearby popup now pans the map to the selected location while navigating, highlights it with a red Mapbox layer, and returns to the player position when the popup closes.
