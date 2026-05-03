@@ -114,8 +114,9 @@ class TeleportEngine:
     OFF_CF   = 0x380  # cave F: camera yaw hook
     BLOCK_SZ = 0x1000
 
-    def __init__(self, teleport_enabled: bool = True):
+    def __init__(self, teleport_enabled: bool = True, use_shared_memory_entity: bool = True):
         self.teleport_enabled = teleport_enabled
+        self.use_shared_memory_entity = use_shared_memory_entity
         self.pm = None
         self.module = None
         self.attached = False
@@ -222,6 +223,60 @@ class TeleportEngine:
                 pass
         return bytes(data), base
 
+    # ── Freedom Flyer shared memory integration ────────────────────────
+
+    FF_SHARED_MEMORY_NAME = "CrimsonDesert_PlayerBase_SharedMem_Bambozu"
+
+    # Setup argtypes para APIs de shared memory (evita SEH crash no Windows).
+    try:
+        _k32 = ctypes.windll.kernel32
+        _k32.OpenFileMappingW.argtypes = [ctypes.c_ulong, ctypes.c_int, ctypes.c_wchar_p]
+        _k32.OpenFileMappingW.restype  = ctypes.c_void_p
+        _k32.MapViewOfFile.argtypes = [ctypes.c_void_p, ctypes.c_ulong, ctypes.c_ulong, ctypes.c_ulong, ctypes.c_size_t]
+        _k32.MapViewOfFile.restype  = ctypes.c_void_p
+        _k32.UnmapViewOfFile.argtypes = [ctypes.c_void_p]
+        _k32.UnmapViewOfFile.restype  = ctypes.c_int
+        _k32.CloseHandle.argtypes = [ctypes.c_void_p]
+        _k32.CloseHandle.restype  = ctypes.c_int
+    except Exception:
+        pass
+
+    def _read_ff_shared_entity(self):
+        """Lê o endereço do player base da shared memory do Freedom Flyer.
+        Retorna o endereço (int) ou 0 se indisponível."""
+        try:
+            FILE_MAP_READ = 0x0004
+            handle = k32.OpenFileMappingW(FILE_MAP_READ, 0,
+                                          self.FF_SHARED_MEMORY_NAME)
+            if not handle:
+                return 0
+            try:
+                ptr = k32.MapViewOfFile(handle, FILE_MAP_READ, 0, 0, 8)
+                if not ptr:
+                    return 0
+                try:
+                    return ctypes.c_ulonglong.from_address(ptr).value
+                finally:
+                    k32.UnmapViewOfFile(ptr)
+            finally:
+                k32.CloseHandle(handle)
+        except Exception:
+            return 0
+
+    def refresh_entity_base(self):
+        """Atualiza td+0x18 via shared memory do Freedom Flyer.
+        Chamado periodicamente pelo broadcast loop para cobrir load screens."""
+        if not self.use_shared_memory_entity or not self.td or not self.pm:
+            return False
+        entity = self._read_ff_shared_entity()
+        if not entity:
+            return False
+        try:
+            self.pm.write_ulonglong(self.td + 0x18, entity)
+            return True
+        except Exception:
+            return False
+
     def _canonical_orig_bytes(self, hook_addr):
         if hook_addr == self.hook_a:
             return self.ORIG_HOOK_A
@@ -306,16 +361,25 @@ class TeleportEngine:
         else:
             log.warning("Static XYZ AOB not found — position reading will use hook fallback")
 
-        idx = data.find(self.AOB_ENTITY)
-        if idx != -1:
-            self.hook_a = base + idx + 7  # pula "sub rsp,50; mov rdi,rcx" (7 bytes)
-        elif "hook_a_rva" in saved:
-            self.hook_a = base + int(saved["hook_a_rva"])
-        elif not any(self.xyz_addr):
-            raise RuntimeError("Entity hook AOB not found and no static XYZ — update required")
-        else:
+        # Tenta shared memory do Freedom Flyer para entity base.
+        # Se disponível, hook_a é desnecessário — o entity_base vem da shared memory.
+        # Fallback: AOB scan normal para hook_a.
+        if self.use_shared_memory_entity and self._read_ff_shared_entity():
             self.hook_a = 0
-            log.warning("Entity hook AOB not found — teleport unavailable, position via static globals")
+            log.info("Entity base via Freedom Flyer shared memory — hook_a not needed")
+        else:
+            if self.use_shared_memory_entity:
+                log.info("Freedom Flyer shared memory not available — falling back to hook_a")
+            idx = data.find(self.AOB_ENTITY)
+            if idx != -1:
+                self.hook_a = base + idx + 7  # pula "sub rsp,50; mov rdi,rcx" (7 bytes)
+            elif "hook_a_rva" in saved:
+                self.hook_a = base + int(saved["hook_a_rva"])
+            elif not any(self.xyz_addr):
+                raise RuntimeError("Entity hook AOB not found and no static XYZ — update required")
+            else:
+                self.hook_a = 0
+                log.warning("Entity hook AOB not found — teleport unavailable, position via static globals")
 
         idx = data.find(self.AOB_POS)
         if idx != -1:
@@ -787,6 +851,14 @@ class TeleportEngine:
 
         # Inicializar tp_block com zeros (flag=0, sem teleport pendente)
         self.pm.write_bytes(self.tp, bytes(20), 20)
+
+        # Se shared memory mode, popular td+0x18 ANTES dos hooks começarem.
+        # hook_a escreve td+0x18 via cave_a; sem hook_a, preenchemos aqui.
+        if not self.hook_a and self.use_shared_memory_entity:
+            if self.refresh_entity_base():
+                log.info("Entity base populated from Freedom Flyer shared memory")
+            else:
+                log.warning("Failed to read Freedom Flyer shared memory — entity detection may fail")
 
         caves = [
             (self.OFF_CA, self.hook_a,   self._build_cave_a),

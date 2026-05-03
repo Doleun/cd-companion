@@ -682,6 +682,8 @@ def main():
     if not cfg.get('teleportEnabled', True):
         os.environ['CD_TELEPORT_ENABLED'] = '0'
     os.environ['CD_NEARBY_CONTROLS_ENABLED'] = '1' if cfg.get('nearbyControlsEnabled', False) else '0'
+    if not cfg.get('useSharedMemoryEntity', True):
+        os.environ['CD_USE_SHARED_MEMORY_ENTITY'] = '0'
 
     # ── Checagem de admin e dependências (antes de qualquer coisa) ────
     from server.main import assert_admin, _check_dependencies

@@ -293,6 +293,11 @@ class SettingsDialog(QDialog):
         option('teleportEnabled', 'Enable teleport (restart overlay and game)',
                'When disabled, the physics delta hook (hook_e) and invulnerability hook (hook_c) '
                'are not injected into the game. Useful to avoid conflicts with other mods.')
+        option('useSharedMemoryEntity', 'Use Freedom Flyer shared memory',
+               'Reads player entity base from Freedom Flyer shared memory instead of installing '
+               'an entity hook (hook_a). Reduces hook conflicts when using both mods together. '
+               'Disable if not using Freedom Flyer and experiencing entity detection issues.')
+
         self._center_y_value = QLabel()
         self._center_y_value.setStyleSheet(
             "color:#ffd060; font:13px 'Consolas'; min-width:48px;")

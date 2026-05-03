@@ -1,3 +1,9 @@
+## v0.06.01
+
+### Added
+- Freedom Flyer compatibility: teleport now works when using both mods together.
+- Optional shared entity base: player detection can use Freedom Flyer's shared memory, reducing hook conflicts. Toggle in Settings → Teleport.
+
 ## v0.06.00
 
 ### Added

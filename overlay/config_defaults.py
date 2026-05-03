@@ -16,6 +16,7 @@ SETTING_DEFAULTS = {
     'disableGpuVsync':       False,
     'realtimeTransport':     'websocket', # 'native'|'websocket'
     'teleportEnabled':       True,
+    'useSharedMemoryEntity': True,
     'nearbyControlsEnabled': False,
     'nearbyThreshold':       0.005,
     'nearbyRespectMapVisibility': True,

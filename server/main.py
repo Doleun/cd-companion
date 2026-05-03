@@ -769,10 +769,13 @@ async def _hotkey_nearby_input(action: str):
 async def _broadcast_loop():
     global _engine, _last_pos
     teleport_enabled = os.environ.get('CD_TELEPORT_ENABLED', '1') != '0'
-    _engine = TeleportEngine(teleport_enabled=teleport_enabled)
+    use_shared_memory_entity = os.environ.get('CD_USE_SHARED_MEMORY_ENTITY', '1') != '0'
+    _engine = TeleportEngine(teleport_enabled=teleport_enabled,
+                              use_shared_memory_entity=use_shared_memory_entity)
     if not teleport_enabled:
         log.info("Teleport DISABLED — hooks hook_e and hook_c will not be injected")
     _last_broadcast_time: float = 0.0
+    _last_entity_refresh: float = 0.0
     _last_map_marker_event = None
     _last_client_count = 0
     _last_camera_heading = None
@@ -842,6 +845,11 @@ async def _broadcast_loop():
 
         realtime_events = []
         now = asyncio.get_event_loop().time()
+
+        # Refresh entity base via Freedom Flyer shared memory a cada 5s
+        if now - _last_entity_refresh >= 5.0:
+            _last_entity_refresh = now
+            _engine.refresh_entity_base()
 
         # Broadcast to connected clients; throttle to 1s when position unchanged
         if apos and _clients:
