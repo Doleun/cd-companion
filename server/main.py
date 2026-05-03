@@ -20,6 +20,7 @@ import logging
 import os
 import struct
 import sys
+import threading
 import time
 
 from server.memory import TeleportEngine
@@ -262,6 +263,10 @@ def _save_waypoints(waypoints):
 
 _clients: set = set()
 _client_locks: dict = {}    # websocket → asyncio.Lock (serializa sends)
+_client_options: dict = {}  # websocket -> opcoes negociadas pelo cliente
+_realtime_seq: int = 0
+_latest_realtime_lock = threading.Lock()
+_latest_realtime_frame = None
 _engine: TeleportEngine = None
 _cal_cache: dict = {}
 _last_pos: dict = None          # última posição conhecida
@@ -300,6 +305,45 @@ async def _broadcast_all(msg: str):
     for client in set(_clients):
         await _safe_send(client, msg)
 
+def _make_realtime_frame(events: list):
+    global _realtime_seq
+    _realtime_seq += 1
+    sent_at = round(time.time() * 1000.0, 3)
+    return {
+        "type": "realtime",
+        "seq": _realtime_seq,
+        "sentAt": sent_at,
+        "events": events,
+    }
+
+def _publish_latest_realtime(events: list):
+    global _latest_realtime_frame
+    frame = _make_realtime_frame(events)
+    with _latest_realtime_lock:
+        _latest_realtime_frame = frame
+    return frame
+
+def get_latest_realtime_frame():
+    with _latest_realtime_lock:
+        return _latest_realtime_frame
+
+async def _broadcast_realtime(events: list):
+    """Envia eventos frequentes. Clientes opt-in recebem 1 frame WebSocket por tick."""
+    if not events:
+        return
+    frame = _publish_latest_realtime(events)
+    bundled_msg = json.dumps(frame)
+    individual_msgs = [json.dumps(event) for event in events]
+    for client in set(_clients):
+        opts = _client_options.get(client, {})
+        if opts.get("native_realtime"):
+            continue
+        if opts.get("realtime_bundle"):
+            await _safe_send(client, bundled_msg)
+        else:
+            for msg in individual_msgs:
+                await _safe_send(client, msg)
+
 async def _send_waypoints(websocket=None):
     """Envia lista de waypoints. Se websocket=None, broadcast para todos."""
     msg = json.dumps({"type": "waypoints", "data": _waypoints})
@@ -321,6 +365,7 @@ async def _handle_client(websocket):
              websocket.remote_address, port, len(_clients) + 1)
     _clients.add(websocket)
     _client_locks[websocket] = asyncio.Lock()
+    _client_options[websocket] = {}
     log.info("Client connected  (%d total)", len(_clients))
 
     # Enviar waypoints salvos ao conectar
@@ -335,7 +380,12 @@ async def _handle_client(websocket):
 
             action = cmd.get("cmd")
 
-            if action == "teleport":
+            if action == "client_options":
+                opts = _client_options.setdefault(websocket, {})
+                opts["realtime_bundle"] = bool(cmd.get("realtimeBundle"))
+                opts["native_realtime"] = bool(cmd.get("nativeRealtime"))
+
+            elif action == "teleport":
                 # Teleport para coordenadas absolutas (de waypoint ou comunidade)
                 x, y, z = cmd.get("x"), cmd.get("y"), cmd.get("z")
                 if None not in (x, y, z) and _engine and _engine.hooks_installed:
@@ -512,6 +562,7 @@ async def _handle_client(websocket):
     finally:
         _clients.discard(websocket)
         _client_locks.pop(websocket, None)
+        _client_options.pop(websocket, None)
         log.info("Client disconnected  (%d total)", len(_clients))
 
 async def _broadcast_status(status: str):
@@ -696,6 +747,8 @@ async def _broadcast_loop():
     if not teleport_enabled:
         log.info("Teleport DISABLED — hooks hook_e and hook_c will not be injected")
     _last_broadcast_time: float = 0.0
+    _last_map_marker_event = None
+    _last_client_count = 0
     _was_attached = False
 
     while True:
@@ -738,6 +791,8 @@ async def _broadcast_loop():
                 pass
             continue
 
+        realtime_events = []
+
         # Broadcast to connected clients; throttle to 1s when position unchanged
         if apos and _clients:
             x, y, z = apos
@@ -751,11 +806,11 @@ async def _broadcast_loop():
                     if _engine.hook_cam:
                         cam_heading, cam_raw = _engine.get_camera_heading()
                         if cam_heading is not None:
-                            await _broadcast_all(json.dumps({
+                            await _broadcast_realtime([{
                                 "type": "camera_heading",
                                 "heading": round(cam_heading, 1),
                                 "raw": round(cam_raw, 4),
-                            }))
+                            }])
                     await asyncio.sleep(BROADCAST_INTERVAL)
                     continue
             _last_broadcast_time = now
@@ -774,37 +829,42 @@ async def _broadcast_loop():
             }
             if heading is not None:
                 payload["heading"] = round(heading, 1)
-            msg = json.dumps(payload)
-            await _broadcast_all(msg)
+            realtime_events.append(payload)
 
         # Broadcast camera heading (independente da posição)
         if _clients and _engine and _engine.hooks_installed:
             cam_heading, cam_raw = _engine.get_camera_heading()
             if cam_heading is not None:
-                await _broadcast_all(json.dumps({
+                realtime_events.append({
                     "type": "camera_heading",
                     "heading": round(cam_heading, 1),
                     "raw": round(cam_raw, 4),
-                }))
+                })
 
         # Broadcast map marker position
         if _clients and _engine and _engine.hooks_installed:
+            force_map_marker = len(_clients) != _last_client_count
             dest = _engine.get_map_dest()
             if dest:
                 realm = "abyss" if dest[1] > ABYSS_HEIGHT_THRESHOLD else "pywel"
                 cal = _get_cal(realm)
                 lng, lat = game_to_lnglat(dest[0], dest[2], cal)
-                await _broadcast_all(json.dumps({
+                marker_event = {
                     "type": "map_marker",
                     "lng": round(lng, 8),
                     "lat": round(lat, 8),
                     "x": round(dest[0], 2),
                     "y": round(dest[1], 2),
                     "z": round(dest[2], 2),
-                }))
+                }
             else:
-                await _broadcast_all(json.dumps({"type": "map_marker_cleared"}))
+                marker_event = {"type": "map_marker_cleared"}
+            if force_map_marker or marker_event != _last_map_marker_event:
+                realtime_events.append(marker_event)
+                _last_map_marker_event = marker_event
+            _last_client_count = len(_clients)
 
+        await _broadcast_realtime(realtime_events)
         await asyncio.sleep(BROADCAST_INTERVAL)
 
 WSS_PORT = 7892
@@ -829,7 +889,8 @@ async def _main(ready_event=None):
 
         if ssl_ctx:
             await stack.enter_async_context(
-                websockets.serve(_handle_client, "0.0.0.0", WSS_PORT, origins=None, ssl=ssl_ctx))
+                websockets.serve(_handle_client, "0.0.0.0", WSS_PORT, origins=None,
+                                 ssl=ssl_ctx))
             log.info("WSS → wss://0.0.0.0:%d (Firefox Android)", WSS_PORT)
         else:
             log.warning("server.crt não encontrado para habilitar WSS")

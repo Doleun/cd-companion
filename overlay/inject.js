@@ -15,6 +15,8 @@
 
   const WS_URL = '$WS_URL';
   const RECONNECT_MS = 3000;
+  const LIVE_VIEW_DURATION_MS = 16;
+  const NATIVE_REALTIME = !!window.__cdNativeRealtimeEnabled;
   const CENTER_TELEPORT_Y_KEY = 'cd_center_teleport_y';
   const NEARBY_RESPECT_MAP_VISIBILITY_KEY = 'cd_nearby_respect_map_visibility';
   const CLIENT_ID = (window.crypto && typeof window.crypto.randomUUID === 'function')
@@ -43,6 +45,12 @@
   let waypointFilter  = '';
   let hasPreTeleport  = false;
   let teleportEnabled = !(window.__cdSettings && window.__cdSettings.teleportEnabled === false);
+  let pendingPosition = null;
+  let pendingCameraHeading = null;
+  let pendingMapMarker = null;
+  let pendingMapMarkerCleared = false;
+  let realtimeFlushScheduled = false;
+  let realtimeStats = null;
 
   document.addEventListener('keydown', (e) => { if (e.key === 'Shift') shiftHeld = true;  });
   document.addEventListener('keyup',   (e) => { if (e.key === 'Shift') shiftHeld = false; });
@@ -306,6 +314,16 @@
     }
   }
 
+  function liveEaseTo(m, view) {
+    if (!m) return;
+    if (typeof m.jumpTo === 'function') {
+      m.jumpTo(view);
+      return;
+    }
+    if (typeof m.stop === 'function') m.stop();
+    m.easeTo(Object.assign({ duration: LIVE_VIEW_DURATION_MS }, view));
+  }
+
   function setRotateWithPlayer(val) {
     rotateWithPlayer = !!val;
     if (rotateWithPlayer) rotateWithCamera = false;
@@ -351,11 +369,11 @@
     updateArrowRotation();
     const mm = getMap();
     if (!mm) return;
-    const view = { bearing: lastCameraHeading, duration: 50 };
+    const view = { bearing: lastCameraHeading };
     if (following && !shiftHeld && lastPos && !nearbySelectionActive) {
       view.center = [lastPos.lng, lastPos.lat];
     }
-    mm.easeTo(view);
+    liveEaseTo(mm, view);
   }
 
   // ── Botão flutuante status (direita) — toggle follow + expandir ───
@@ -495,7 +513,7 @@
 
   function pan(lng, lat) {
     const m = getMap();
-    if (m) m.easeTo({ center: [lng, lat], duration: 50 });
+    liveEaseTo(m, { center: [lng, lat] });
   }
 
   function panToLocationId(locationId) {
@@ -1466,34 +1484,159 @@
   }
 
   // ── WebSocket ─────────────────────────────────────────────────────
+  function handlePositionMessage(msg) {
+    if (isSamePositionMessage(msg, lastPos)) return;
+    updateHeading(msg);
+    lastPos = msg;
+    if (marker) marker.setLngLat([msg.lng, msg.lat]);
+    updateNearbyCircle();
+    const mm = window.mapManager && window.mapManager.map;
+    if (rotateWithCamera) {
+      // camera_heading controla bearing e centro nesse modo.
+    } else if (following && !shiftHeld && !nearbySelectionActive && rotateWithPlayer && mm) {
+      liveEaseTo(mm, { center: [msg.lng, msg.lat], bearing: lastHeading });
+    } else if (following && !shiftHeld && !nearbySelectionActive) {
+      pan(msg.lng, msg.lat);
+    }
+    updatePanel();
+  }
+
+  function handleMapMarkerMessage(msg) {
+    mapDestLng = msg.lng;
+    mapDestLat = msg.lat;
+    if (!mapMarker) createMapMarker();
+    ensureEdgeIndicator();
+    installEdgeIndicatorListener();
+    if (mapMarker) {
+      mapMarker.setLngLat([msg.lng, msg.lat]);
+      mapMarker.getElement().style.display = '';
+    }
+    updateEdgeIndicator();
+  }
+
+  function handleMapMarkerCleared() {
+    mapDestLng = null;
+    mapDestLat = null;
+    if (mapMarker) mapMarker.getElement().style.display = 'none';
+    const ei = document.getElementById('cdEdgeIndicator');
+    if (ei) ei.style.display = 'none';
+  }
+
+  function scheduleRealtimeFlush() {
+    if (realtimeFlushScheduled) return;
+    realtimeFlushScheduled = true;
+    requestAnimationFrame(() => {
+      realtimeFlushScheduled = false;
+      const pos = pendingPosition;
+      const cam = pendingCameraHeading;
+      const markerMsg = pendingMapMarker;
+      const clearMarker = pendingMapMarkerCleared;
+      pendingPosition = null;
+      pendingCameraHeading = null;
+      pendingMapMarker = null;
+      pendingMapMarkerCleared = false;
+
+      if (pos) handlePositionMessage(pos);
+      if (cam) onCameraHeading(cam);
+      if (markerMsg) handleMapMarkerMessage(markerMsg);
+      else if (clearMarker) handleMapMarkerCleared();
+    });
+  }
+
+  function queueRealtimeEvent(msg) {
+    if (msg.type === 'position') {
+      pendingPosition = msg;
+      return true;
+    }
+    if (msg.type === 'camera_heading') {
+      pendingCameraHeading = msg;
+      return true;
+    }
+    if (msg.type === 'map_marker') {
+      pendingMapMarker = msg;
+      pendingMapMarkerCleared = false;
+      return true;
+    }
+    if (msg.type === 'map_marker_cleared') {
+      pendingMapMarker = null;
+      pendingMapMarkerCleared = true;
+      return true;
+    }
+    return false;
+  }
+
+  function recordRealtimeArrival(frame) {
+    if (typeof frame.sentAt !== 'number') return;
+    const now = Date.now();
+    const latency = now - frame.sentAt;
+    if (!realtimeStats) {
+      realtimeStats = {
+        count: 0,
+        lost: 0,
+        max: 0,
+        sum: 0,
+        samples: [],
+        lastSeq: null,
+        lastLog: now
+      };
+    }
+    if (typeof frame.seq === 'number' && realtimeStats.lastSeq !== null) {
+      const gap = frame.seq - realtimeStats.lastSeq;
+      if (gap > 1) realtimeStats.lost += gap - 1;
+    }
+    if (typeof frame.seq === 'number') realtimeStats.lastSeq = frame.seq;
+    realtimeStats.count += 1;
+    realtimeStats.sum += latency;
+    realtimeStats.max = Math.max(realtimeStats.max, latency);
+    realtimeStats.samples.push(latency);
+    if (realtimeStats.samples.length > 240) realtimeStats.samples.shift();
+    if (now - realtimeStats.lastLog >= 2000) {
+      const sorted = realtimeStats.samples.slice().sort((a, b) => a - b);
+      const p95 = sorted.length ? sorted[Math.floor((sorted.length - 1) * 0.95)] : 0;
+      const avg = realtimeStats.count ? realtimeStats.sum / realtimeStats.count : 0;
+      console.info(
+        `[CD overlay realtime] avg=${avg.toFixed(1)}ms p95=${p95.toFixed(1)}ms ` +
+        `max=${realtimeStats.max.toFixed(1)}ms lost=${realtimeStats.lost}`
+      );
+      realtimeStats.count = 0;
+      realtimeStats.lost = 0;
+      realtimeStats.max = 0;
+      realtimeStats.sum = 0;
+      realtimeStats.samples = [];
+      realtimeStats.lastLog = now;
+    }
+  }
+
   function connect() {
     if (ws && (ws.readyState === 0 || ws.readyState === 1)) return;
     ws = new WebSocket(WS_URL);
-    ws.onopen  = () => updatePanel();
+    ws.onopen  = () => {
+      sendCmd({
+        cmd: 'client_options',
+        realtimeBundle: false,
+        nativeRealtime: NATIVE_REALTIME
+      });
+      updatePanel();
+    };
     ws.onclose = () => { updatePanel(); setTimeout(connect, RECONNECT_MS); };
     ws.onerror = () => updatePanel();
     ws.onmessage = (e) => {
       try {
         const msg = JSON.parse(e.data);
 
-        if (msg.type === 'position') {
-          if (isSamePositionMessage(msg, lastPos)) return;
-          updateHeading(msg);
-          lastPos = msg;
-          if (marker) marker.setLngLat([msg.lng, msg.lat]);
-          updateNearbyCircle();
-          const mm = window.mapManager && window.mapManager.map;
-          if (rotateWithCamera) {
-            // camera_heading controla bearing e centro nesse modo.
-          } else if (following && !shiftHeld && !nearbySelectionActive && rotateWithPlayer && mm) {
-            mm.easeTo({ center: [msg.lng, msg.lat], bearing: lastHeading, duration: 150 });
-          } else if (following && !shiftHeld && !nearbySelectionActive) {
-            pan(msg.lng, msg.lat);
-          }
-          updatePanel();
+        if (msg.type === 'realtime' && Array.isArray(msg.events)) {
+          recordRealtimeArrival(msg);
+          let queued = false;
+          msg.events.forEach((event) => { queued = queueRealtimeEvent(event) || queued; });
+          if (queued) scheduleRealtimeFlush();
+
+        } else if (msg.type === 'position') {
+          pendingPosition = msg;
+          scheduleRealtimeFlush();
 
         } else if (msg.type === 'camera_heading') {
-          onCameraHeading(msg);
+          pendingCameraHeading = msg;
+          scheduleRealtimeFlush();
 
         } else if (msg.type === 'waypoints') {
           waypoints = msg.data || [];
@@ -1528,44 +1671,32 @@
           panToLocationId(msg.locationId);
 
         } else if (msg.type === 'map_marker') {
-          mapDestLng = msg.lng;
-          mapDestLat = msg.lat;
-          if (!mapMarker) createMapMarker();
-          ensureEdgeIndicator();
-          installEdgeIndicatorListener();
-          if (mapMarker) {
-            mapMarker.setLngLat([msg.lng, msg.lat]);
-            mapMarker.getElement().style.display = '';
-          }
-          updateEdgeIndicator();
+          pendingMapMarker = msg;
+          pendingMapMarkerCleared = false;
+          scheduleRealtimeFlush();
 
         } else if (msg.type === 'map_marker_cleared') {
-          mapDestLng = null;
-          mapDestLat = null;
-          if (mapMarker) mapMarker.getElement().style.display = 'none';
-          const ei = document.getElementById('cdEdgeIndicator');
-          if (ei) ei.style.display = 'none';
+          pendingMapMarker = null;
+          pendingMapMarkerCleared = true;
+          scheduleRealtimeFlush();
         }
 
         // backward-compat: mensagens sem type são posição
         if (!msg.type && typeof msg.lng === 'number') {
-          if (isSamePositionMessage(msg, lastPos)) return;
-          updateHeading(msg);
-          lastPos = msg;
-          if (marker) marker.setLngLat([msg.lng, msg.lat]);
-          const mm2 = window.mapManager && window.mapManager.map;
-          if (rotateWithCamera) {
-            // camera_heading controla bearing e centro nesse modo.
-          } else if (following && !shiftHeld && !nearbySelectionActive && rotateWithPlayer && mm2) {
-            mm2.easeTo({ center: [msg.lng, msg.lat], bearing: lastHeading, duration: 150 });
-          } else if (following && !shiftHeld && !nearbySelectionActive) {
-            pan(msg.lng, msg.lat);
-          }
-          updatePanel();
+          pendingPosition = msg;
+          scheduleRealtimeFlush();
         }
       } catch (_) {}
     };
   }
+
+  window.__cdNativeRealtime = function(frame) {
+    if (!frame || !Array.isArray(frame.events)) return;
+    recordRealtimeArrival(frame);
+    let queued = false;
+    frame.events.forEach((event) => { queued = queueRealtimeEvent(event) || queued; });
+    if (queued) scheduleRealtimeFlush();
+  };
 
   // ── Botão flutuante para abrir/fechar waypoints ───────────────────
   function ensureWpToggleBtn() {

@@ -421,6 +421,35 @@ class SettingsDialog(QDialog):
         section('Performance', 'right')
         option('disableGpuVsync', 'Disable GPU vsync (multi-monitor fix)',
                'Fixes FPS cap when using the overlay on a secondary monitor with a different refresh rate. Requires restart.')
+        active_layout[0].addWidget(QLabel('Realtime transport'))
+        from PyQt5.QtWidgets import QComboBox
+        self._realtime_transport_combo = QComboBox()
+        self._realtime_transport_combo.setFixedHeight(32)
+        self._realtime_transport_combo.setStyleSheet(
+            "QComboBox{background:#e2e8f0;color:#111827;border:1px solid #64748b;"
+            "border-radius:6px;padding:4px 30px 4px 8px;}"
+            "QComboBox:focus{border:1px solid #ffd060;}"
+            "QComboBox::drop-down{subcontrol-origin:padding;subcontrol-position:top right;"
+            "width:24px;border-left:1px solid #94a3b8;background:#cbd5e1;"
+            "border-top-right-radius:6px;border-bottom-right-radius:6px;}"
+            "QComboBox::down-arrow{image:none;width:0;height:0;}"
+            "QComboBox QAbstractItemView{background:#f8fafc;color:#111827;"
+            "selection-background-color:#ffd060;selection-color:#111827;"
+            "border:1px solid #475569;}")
+        self._realtime_transport_combo.addItem('WebSocket', 'websocket')
+        self._realtime_transport_combo.addItem('Native bridge (experimental)', 'native')
+        current_transport = cfg.get(
+            'realtimeTransport', SETTING_DEFAULTS['realtimeTransport'])
+        idx = self._realtime_transport_combo.findData(current_transport)
+        if idx < 0:
+            idx = self._realtime_transport_combo.findData(
+                SETTING_DEFAULTS['realtimeTransport'])
+        self._realtime_transport_combo.setCurrentIndex(idx)
+        active_layout[0].addWidget(self._realtime_transport_combo)
+        rt_note = QLabel('Restart overlay or reload the map to apply transport changes.')
+        rt_note.setWordWrap(True)
+        rt_note.setStyleSheet('color:#64748b; font:11px "Segoe UI"; margin-top:-4px;')
+        active_layout[0].addWidget(rt_note)
 
         section('Direction arrow', 'right')
         option('rotateWithPlayer', 'Rotate map with player',
@@ -432,7 +461,6 @@ class SettingsDialog(QDialog):
         self._checkboxes['rotateWithCamera'].toggled.connect(
             lambda checked: checked and self._checkboxes['rotateWithPlayer'].setChecked(False))
         active_layout[0].addWidget(QLabel('Source'))
-        from PyQt5.QtWidgets import QComboBox
         self._heading_combo = QComboBox()
         self._heading_combo.setFixedHeight(32)
         self._heading_combo.setStyleSheet(
@@ -482,6 +510,7 @@ class SettingsDialog(QDialog):
         result['transparency'] = self._slider.value()
         result['centerTeleportY'] = float(self._center_y.value())
         result['headingSource'] = self._heading_combo.currentData()
+        result['realtimeTransport'] = self._realtime_transport_combo.currentData()
         result['nearbyThreshold'] = self._nearby_radius.value() / 1000.0
         result['mapIconScale'] = self._map_icon_scale.value() / 10.0
         self._save_nearby_hotkey()
