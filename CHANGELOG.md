@@ -4,6 +4,8 @@
 - Nearby popup now pans the map to the selected location while navigating, highlights it with a red Mapbox layer, and returns to the player position when the popup closes.
 - Nearby popup can now respect the category visibility currently selected on the map, with a Settings toggle to show all categories instead.
 - Overlay Settings now includes a map icon size slider for adjusting location marker scale.
+- Nearby popup items can be filtered by found/unfound status via gamepad Back button, with found items sorted to the bottom. D-pad left/right navigates pages.
+- Title bar now supports double-click to maximize/restore the overlay window and includes a maximize button (square mode only).
 
 ### Fixed
 - Nearby popup controller navigation now only works while the popup window is the active foreground window, preventing D-pad/A/B from changing the popup while playing with the game focused.
