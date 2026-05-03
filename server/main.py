@@ -108,6 +108,7 @@ BROADCAST_INTERVAL = 1/60   # seconds between position broadcasts (~60 Hz)
 RETRY_INTERVAL     = 5     # seconds between attach/hook retries
 POS_CHANGE_THRESHOLD = 0.01  # squared distance threshold to consider position changed
 IDLE_BROADCAST_INTERVAL = 1.0  # seconds between broadcasts when position unchanged
+CAMERA_HEADING_HEARTBEAT_INTERVAL = 1.0  # seconds between unchanged camera broadcasts
 
 # ── Hotkeys globais ──────────────────────────────────────────────────
 
@@ -264,6 +265,7 @@ def _save_waypoints(waypoints):
 _clients: set = set()
 _client_locks: dict = {}    # websocket → asyncio.Lock (serializa sends)
 _client_options: dict = {}  # websocket -> opcoes negociadas pelo cliente
+_client_realtime_stats: dict = {}
 _realtime_seq: int = 0
 _latest_realtime_lock = threading.Lock()
 _latest_realtime_frame = None
@@ -301,9 +303,51 @@ async def _safe_send(websocket, msg: str):
         except Exception:
             _clients.discard(websocket)
 
+async def _safe_send_many(websocket, messages):
+    """Envia varias mensagens para um cliente sob um unico lock."""
+    lock = _client_locks.get(websocket)
+    if not lock:
+        return
+    async with lock:
+        try:
+            for msg in messages:
+                await websocket.send(msg)
+        except Exception:
+            _clients.discard(websocket)
+
 async def _broadcast_all(msg: str):
-    for client in set(_clients):
-        await _safe_send(client, msg)
+    await asyncio.gather(
+        *(_safe_send(client, msg) for client in set(_clients)),
+        return_exceptions=True,
+    )
+
+def _client_label(client):
+    opts = _client_options.get(client, {})
+    name = opts.get("client_name") or "client"
+    remote = getattr(client, "remote_address", None)
+    return f"{name}@{remote}" if remote else name
+
+def _record_realtime_send(client, events):
+    if os.environ.get('CD_DEBUG_REALTIME') != '1':
+        return
+    camera_count = sum(1 for event in events if event.get("type") == "camera_heading")
+    if not camera_count:
+        return
+    now = time.monotonic()
+    stats = _client_realtime_stats.setdefault(client, {
+        "camera": 0,
+        "frames": 0,
+        "last_log": now,
+    })
+    stats["camera"] += camera_count
+    stats["frames"] += 1
+    if now - stats["last_log"] >= 1.0:
+        log.info(
+            "Realtime send %s camera=%d frames=%d",
+            _client_label(client), stats["camera"], stats["frames"])
+        stats["camera"] = 0
+        stats["frames"] = 0
+        stats["last_log"] = now
 
 def _make_realtime_frame(events: list):
     global _realtime_seq
@@ -334,15 +378,18 @@ async def _broadcast_realtime(events: list):
     frame = _publish_latest_realtime(events)
     bundled_msg = json.dumps(frame)
     individual_msgs = [json.dumps(event) for event in events]
+    tasks = []
     for client in set(_clients):
         opts = _client_options.get(client, {})
         if opts.get("native_realtime"):
             continue
+        _record_realtime_send(client, events)
         if opts.get("realtime_bundle"):
-            await _safe_send(client, bundled_msg)
+            tasks.append(_safe_send(client, bundled_msg))
         else:
-            for msg in individual_msgs:
-                await _safe_send(client, msg)
+            tasks.append(_safe_send_many(client, individual_msgs))
+    if tasks:
+        await asyncio.gather(*tasks, return_exceptions=True)
 
 async def _send_waypoints(websocket=None):
     """Envia lista de waypoints. Se websocket=None, broadcast para todos."""
@@ -366,6 +413,7 @@ async def _handle_client(websocket):
     _clients.add(websocket)
     _client_locks[websocket] = asyncio.Lock()
     _client_options[websocket] = {}
+    _client_realtime_stats[websocket] = {}
     log.info("Client connected  (%d total)", len(_clients))
 
     # Enviar waypoints salvos ao conectar
@@ -384,6 +432,9 @@ async def _handle_client(websocket):
                 opts = _client_options.setdefault(websocket, {})
                 opts["realtime_bundle"] = bool(cmd.get("realtimeBundle"))
                 opts["native_realtime"] = bool(cmd.get("nativeRealtime"))
+                client_name = cmd.get("clientName")
+                if isinstance(client_name, str) and client_name.strip():
+                    opts["client_name"] = client_name.strip()[:32]
 
             elif action == "teleport":
                 # Teleport para coordenadas absolutas (de waypoint ou comunidade)
@@ -563,6 +614,7 @@ async def _handle_client(websocket):
         _clients.discard(websocket)
         _client_locks.pop(websocket, None)
         _client_options.pop(websocket, None)
+        _client_realtime_stats.pop(websocket, None)
         log.info("Client disconnected  (%d total)", len(_clients))
 
 async def _broadcast_status(status: str):
@@ -749,7 +801,30 @@ async def _broadcast_loop():
     _last_broadcast_time: float = 0.0
     _last_map_marker_event = None
     _last_client_count = 0
+    _last_camera_heading = None
+    _last_camera_broadcast_time: float = 0.0
     _was_attached = False
+
+    def _camera_heading_event(now):
+        nonlocal _last_camera_heading, _last_camera_broadcast_time
+        if not (_engine and _engine.hook_cam):
+            return None
+        cam_heading, cam_raw = _engine.get_camera_heading()
+        if cam_heading is None:
+            return None
+        heading = round(cam_heading, 1)
+        if (
+            heading == _last_camera_heading and
+            now - _last_camera_broadcast_time < CAMERA_HEADING_HEARTBEAT_INTERVAL
+        ):
+            return None
+        _last_camera_heading = heading
+        _last_camera_broadcast_time = now
+        return {
+            "type": "camera_heading",
+            "heading": heading,
+            "raw": round(cam_raw, 4),
+        }
 
     while True:
         # Attach if needed
@@ -792,25 +867,20 @@ async def _broadcast_loop():
             continue
 
         realtime_events = []
+        now = asyncio.get_event_loop().time()
 
         # Broadcast to connected clients; throttle to 1s when position unchanged
         if apos and _clients:
             x, y, z = apos
             realm = "abyss" if y > ABYSS_HEIGHT_THRESHOLD else "pywel"
-            now = asyncio.get_event_loop().time()
             if _last_pos and realm == _last_pos["realm"]:
                 dx = x - _last_pos["x"]
                 dz = z - _last_pos["z"]
                 dy = y - _last_pos["y"]
                 if dx*dx + dz*dz + dy*dy < POS_CHANGE_THRESHOLD and now - _last_broadcast_time < IDLE_BROADCAST_INTERVAL:
-                    if _engine.hook_cam:
-                        cam_heading, cam_raw = _engine.get_camera_heading()
-                        if cam_heading is not None:
-                            await _broadcast_realtime([{
-                                "type": "camera_heading",
-                                "heading": round(cam_heading, 1),
-                                "raw": round(cam_raw, 4),
-                            }])
+                    cam_event = _camera_heading_event(now)
+                    if cam_event:
+                        await _broadcast_realtime([cam_event])
                     await asyncio.sleep(BROADCAST_INTERVAL)
                     continue
             _last_broadcast_time = now
@@ -833,13 +903,9 @@ async def _broadcast_loop():
 
         # Broadcast camera heading (independente da posição)
         if _clients and _engine and _engine.hooks_installed:
-            cam_heading, cam_raw = _engine.get_camera_heading()
-            if cam_heading is not None:
-                realtime_events.append({
-                    "type": "camera_heading",
-                    "heading": round(cam_heading, 1),
-                    "raw": round(cam_raw, 4),
-                })
+            cam_event = _camera_heading_event(now)
+            if cam_event:
+                realtime_events.append(cam_event)
 
         # Broadcast map marker position
         if _clients and _engine and _engine.hooks_installed:
