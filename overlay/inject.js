@@ -41,7 +41,6 @@
   let nearbyInputHandler = null;
   let nearbySelectionActive = false;
   let waypointFilter  = '';
-  let calibrationMode = false;
   let hasPreTeleport  = false;
   let teleportEnabled = !(window.__cdSettings && window.__cdSettings.teleportEnabled === false);
 
@@ -117,7 +116,6 @@
       map = window.map;
       createMarker();
       createMapMarker();
-      map.on('click', onMapClick);
       adjustIconSize();
       map.on('zoom', adjustIconSize);
       initLocationTooltip(map);
@@ -440,12 +438,6 @@
           ↩ Abort
         </button>
       </div>
-      <button id="cdOvCalibrate" title="Calibration mode: click on the map to add a reference point"
-        style="width:100%;margin-top:4px;background:rgba(255,208,96,.08);
-        border:1px solid rgba(255,208,96,.2);color:#888;
-        font:10px 'Segoe UI';padding:3px 5px;border-radius:4px;cursor:pointer">
-        🎯 Calibration: OFF
-      </button>
     `;
     document.body.appendChild(el);
     document.getElementById('cdOvMarker').addEventListener('click', () => {
@@ -457,7 +449,6 @@
       sendCmd({ cmd: 'abort' });
       updatePanel();
     });
-    document.getElementById('cdOvCalibrate').addEventListener('click', toggleCalibrationMode);
   }
 
   function updatePanel() {
@@ -479,7 +470,6 @@
     const coords  = document.getElementById('cdOvCoords');
     const status  = document.getElementById('cdOvStatus');
     const abort   = document.getElementById('cdOvAbort');
-    const calib   = document.getElementById('cdOvCalibrate');
     if (coords && lastPos)
       coords.textContent = `X ${lastPos.x.toFixed(0)}  Z ${lastPos.z.toFixed(0)}  Y ${lastPos.y.toFixed(0)}`;
     if (status) {
@@ -493,12 +483,6 @@
       abort.style.opacity       = hasPreTeleport ? '1'    : '.35';
       abort.style.pointerEvents = hasPreTeleport ? 'auto' : 'none';
     }
-    if (calib) {
-      calib.textContent       = calibrationMode ? '🎯 Calibration: ON (click map)' : '🎯 Calibration: OFF';
-      calib.style.color       = calibrationMode ? '#ffd060' : '#888';
-      calib.style.borderColor = calibrationMode ? 'rgba(255,208,96,.5)' : 'rgba(255,208,96,.2)';
-      calib.style.background  = calibrationMode ? 'rgba(255,208,96,.15)' : 'rgba(255,208,96,.08)';
-    }
   }
 
   function setStatus(text, color, ms) {
@@ -507,23 +491,6 @@
     s.textContent = text;
     s.style.color = color || '#ffd060';
     if (ms) setTimeout(() => updatePanel(), ms);
-  }
-
-  // ── Calibração ────────────────────────────────────────────────────
-  function toggleCalibrationMode() {
-    calibrationMode = !calibrationMode;
-    updatePanel();
-    const canvas = document.querySelector('.mapboxgl-canvas');
-    if (canvas) canvas.style.cursor = calibrationMode ? 'crosshair' : '';
-    if (calibrationMode)
-      setStatus('Click on the map at the character position', '#ffd060');
-  }
-
-  function onMapClick(e) {
-    if (!calibrationMode) return;
-    const { lng, lat } = e.lngLat;
-    const realm = (lastPos && lastPos.realm) || 'pywel';
-    sendCmd({ cmd: 'add_calibration', lng, lat, realm });
   }
 
   function pan(lng, lat) {
@@ -1547,13 +1514,6 @@
             setStatus(msg.err || 'Map teleport failed', '#e07070', 3000);
           }
 
-        } else if (msg.type === 'calibration_result') {
-          if (msg.reset) {
-            calibrationMode = false; updatePanel();
-            setStatus('Calibration reset', '#60e890', 3000);
-          } else if (msg.ok) {
-            setStatus(`Calibration: ${msg.count} point(s) saved`, '#60e890', 3000);
-          }
         } else if (msg.type === 'location_toggle') {
           if (msg.sourceClientId && msg.sourceClientId === CLIENT_ID) return;
           _onLocationToggle(msg.locationId, msg.found);

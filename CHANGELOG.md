@@ -12,6 +12,9 @@
 - Nearby scan radius slider now supports a smaller minimum radius.
 - Nearby scan radius is displayed as a simple 1-8 value in Settings while still saving the internal 0.001-0.008 map radius.
 
+### Removed
+- Calibration UI (button and click-to-add) disabled from the overlay panel.
+
 ## v0.05.00
 
 ### Added
