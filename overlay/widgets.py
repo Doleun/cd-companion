@@ -13,7 +13,8 @@ from PyQt5.QtCore import Qt, QPoint, QTimer, pyqtSignal, QObject
 from PyQt5.QtGui import QKeySequence
 from PyQt5.QtWidgets import (QApplication, QDialog, QVBoxLayout, QHBoxLayout,
                              QLabel, QCheckBox, QPushButton, QSlider,
-                             QMainWindow, QShortcut, QWidget, QKeySequenceEdit)
+                             QMainWindow, QShortcut, QWidget, QKeySequenceEdit,
+                             QScrollArea, QFrame, QLineEdit)
 from PyQt5.QtWebEngineWidgets import QWebEngineView, QWebEnginePage
 
 # Importa SETTING_DEFAULTS do módulo de configuração
@@ -114,6 +115,11 @@ def focus_game_window():
 
 # ── Estilos ──────────────────────────────────────────────────────────
 
+class NoWheelSlider(QSlider):
+    def wheelEvent(self, event):
+        event.ignore()
+
+
 SETTINGS_STYLE = """
 QDialog  { background:#0f0f1a; color:#e2e8f0; }
 QLabel   { color:#e2e8f0; font:13px 'Segoe UI'; }
@@ -126,6 +132,35 @@ QPushButton { background:#1a1a2e; color:#e2e8f0; border:1px solid #2d2d44;
 QPushButton:hover { background:#252540; }
 QPushButton#save { background:#1db954; color:#fff; border:none; }
 QPushButton#save:hover { background:#17a84a; }
+QKeySequenceEdit, QComboBox {
+    background:#e2e8f0; color:#111827; border:1px solid #64748b;
+    border-radius:6px; padding:4px 8px; min-height:22px;
+    selection-background-color:#ffd060; selection-color:#111827;
+}
+QKeySequenceEdit:focus, QComboBox:focus { border:1px solid #ffd060; }
+QComboBox::drop-down {
+    subcontrol-origin:padding; subcontrol-position:top right;
+    width:24px; border-left:1px solid #94a3b8; border-top-right-radius:6px;
+    border-bottom-right-radius:6px; background:#cbd5e1;
+}
+QComboBox::down-arrow {
+    image:none; width:0; height:0; border-left:4px solid transparent;
+    border-right:4px solid transparent; border-top:5px solid #1f2937;
+}
+QComboBox QAbstractItemView {
+    background:#f8fafc; color:#111827; selection-background-color:#ffd060;
+    selection-color:#111827; border:1px solid #475569;
+}
+QScrollArea { background:transparent; border:none; }
+QScrollBar:vertical {
+    background:#111122; width:10px; margin:2px 0 2px 0; border-radius:5px;
+}
+QScrollBar::handle:vertical {
+    background:#475569; min-height:28px; border-radius:5px;
+}
+QScrollBar::handle:vertical:hover { background:#64748b; }
+QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical { height:0; }
+QScrollBar::add-page:vertical, QScrollBar::sub-page:vertical { background:transparent; }
 QSlider::groove:horizontal { height:4px; background:#2d2d44; border-radius:2px; }
 QSlider::handle:horizontal { width:14px; height:14px; margin:-5px 0;
     background:#ffd060; border-radius:7px; }
@@ -141,30 +176,84 @@ class SettingsDialog(QDialog):
         self.setWindowTitle('Settings')
         self.setWindowFlags(self.windowFlags() | Qt.WindowStaysOnTopHint)
         self.setStyleSheet(SETTINGS_STYLE)
-        self.setFixedWidth(340)
+        self.setMinimumWidth(720)
+        self.resize(760, 560)
         self._cfg = cfg
         self._original_opacity = parent.windowOpacity() if parent else 1.0
 
-        layout = QVBoxLayout(self)
-        layout.setSpacing(6)
-        layout.setContentsMargins(20, 20, 20, 20)
+        outer_layout = QVBoxLayout(self)
+        outer_layout.setSpacing(12)
+        outer_layout.setContentsMargins(16, 16, 16, 16)
 
-        def section(text):
+        scroll = QScrollArea()
+        scroll.setWidgetResizable(True)
+        scroll.setFrameShape(QScrollArea.NoFrame)
+        content = QWidget()
+        content.setStyleSheet('background:transparent;')
+        content_layout = QHBoxLayout(content)
+        content_layout.setSpacing(12)
+        content_layout.setContentsMargins(6, 4, 12, 4)
+        left_col = QVBoxLayout()
+        right_col = QVBoxLayout()
+        left_col.setSpacing(12)
+        right_col.setSpacing(12)
+        content_layout.addLayout(left_col, 1)
+        content_layout.addLayout(right_col, 1)
+        scroll.setWidget(content)
+        outer_layout.addWidget(scroll, 1)
+        active_layout = [left_col]
+
+        def section(text, column='left'):
+            frame = QFrame()
+            frame.setObjectName('settingsSection')
+            frame.setStyleSheet(
+                'QFrame#settingsSection{background:#151528;'
+                'border:1px solid #2d2d44;border-radius:7px;}')
+            frame_layout = QVBoxLayout(frame)
+            frame_layout.setSpacing(7)
+            frame_layout.setContentsMargins(12, 10, 12, 12)
             lbl = QLabel(text.upper())
-            lbl.setStyleSheet('color:#7c8db5; font:10px "Segoe UI"; margin-top:10px; margin-bottom:4px;')
-            layout.addWidget(lbl)
+            lbl.setStyleSheet(
+                'color:#7c8db5; font:700 10px "Segoe UI"; '
+                'margin-bottom:2px; letter-spacing:1px;')
+            frame_layout.addWidget(lbl)
+            (right_col if column == 'right' else left_col).addWidget(frame)
+            active_layout[0] = frame_layout
 
         def option(key, label, description):
+            target = active_layout[0]
             cb = QCheckBox(label)
             cb.setChecked(cfg.get(key, SETTING_DEFAULTS[key]))
             cb.setToolTip(description)
             cb.setObjectName(key)
-            layout.addWidget(cb)
+            target.addWidget(cb)
+            if description:
+                desc = QLabel(description)
+                desc.setWordWrap(True)
+                desc.setStyleSheet(
+                    'color:#64748b; font:11px "Segoe UI"; margin-left:26px; '
+                    'margin-top:-4px; margin-bottom:2px;')
+                target.addWidget(desc)
             self._checkboxes[key] = cb
+
+        def slider_block(title, value_label, slider, description=None):
+            target = active_layout[0]
+            row = QHBoxLayout()
+            row.setSpacing(10)
+            title_lbl = QLabel(title)
+            row.addWidget(title_lbl, 1)
+            row.addWidget(value_label)
+            target.addLayout(row)
+            target.addWidget(slider)
+            if description:
+                desc = QLabel(description)
+                desc.setWordWrap(True)
+                desc.setStyleSheet('color:#64748b; font:11px "Segoe UI"; margin-bottom:2px;')
+                target.addWidget(desc)
 
         self._checkboxes = {}
 
-        section('On map load')
+        section('On map load', 'left')
         option('restoreLastPosition',  'Restore last position',
                'Returns to the location and zoom from your last visit')
         option('autoHideFound',        'Hide Found Locations',
@@ -174,20 +263,17 @@ class SettingsDialog(QDialog):
         option('autoHideRightSidebar', 'Hide Right Panel',
                'Automatically closes the right sidebar')
 
-        section('Window')
+        section('Window', 'right')
         option('roundWindow', 'Circular/oval window',
                'Applies an elliptical mask to the window')
         option('followGameWindow', 'Follow game window',
                'Moves the overlay automatically when the game window is moved')
 
         # Transparência
-        transp_row = QHBoxLayout()
-        transp_row.setSpacing(10)
-        transp_lbl = QLabel('Transparency')
         transp_val = QLabel(f'{cfg.get("transparency", SETTING_DEFAULTS["transparency"])}%')
         transp_val.setStyleSheet('color:#ffd060; font:12px "Segoe UI"; min-width:32px;')
 
-        self._slider = QSlider(Qt.Horizontal)
+        self._slider = NoWheelSlider(Qt.Horizontal)
         self._slider.setRange(0, 90)
         self._slider.setValue(cfg.get('transparency', SETTING_DEFAULTS['transparency']))
         self._slider.setTickInterval(10)
@@ -198,23 +284,17 @@ class SettingsDialog(QDialog):
                 parent.setWindowOpacity(1.0 - v / 100)
 
         self._slider.valueChanged.connect(on_slider)
-        transp_row.addWidget(transp_lbl)
-        transp_row.addWidget(self._slider, 1)
-        transp_row.addWidget(transp_val)
-        layout.addLayout(transp_row)
+        slider_block('Transparency', transp_val, self._slider)
 
         # Teleport
-        section('Teleport')
+        section('Teleport', 'left')
         option('teleportEnabled', 'Enable teleport (restart overlay and game)',
                'When disabled, the physics delta hook (hook_e) and invulnerability hook (hook_c) '
                'are not injected into the game. Useful to avoid conflicts with other mods.')
-        center_y_row = QHBoxLayout()
-        center_y_row.setSpacing(10)
-        center_y_lbl = QLabel('Center TP Y')
         self._center_y_value = QLabel()
         self._center_y_value.setStyleSheet(
             "color:#ffd060; font:13px 'Consolas'; min-width:48px;")
-        self._center_y = QSlider(Qt.Horizontal)
+        self._center_y = NoWheelSlider(Qt.Horizontal)
         self._center_y.setRange(-5000, 5000)
         self._center_y.setSingleStep(10)
         self._center_y.setPageStep(100)
@@ -225,19 +305,14 @@ class SettingsDialog(QDialog):
         self._center_y_value.setText(str(self._center_y.value()))
         self._center_y.valueChanged.connect(
             lambda value: self._center_y_value.setText(str(value)))
-        center_y_row.addWidget(center_y_lbl)
-        center_y_row.addWidget(self._center_y, 1)
-        center_y_row.addWidget(self._center_y_value)
-        layout.addLayout(center_y_row)
+        slider_block('Center TP Y', self._center_y_value, self._center_y,
+                     'Absolute Y used when teleporting to the center of the screen')
 
-        section('Map')
-        icon_row = QHBoxLayout()
-        icon_row.setSpacing(10)
-        icon_lbl = QLabel('Map icons')
+        section('Map', 'right')
         self._map_icon_scale_val = QLabel()
         self._map_icon_scale_val.setStyleSheet(
             "color:#ffd060; font:13px 'Consolas'; min-width:40px;")
-        self._map_icon_scale = QSlider(Qt.Horizontal)
+        self._map_icon_scale = NoWheelSlider(Qt.Horizontal)
         self._map_icon_scale.setRange(5, 20)
         self._map_icon_scale.setSingleStep(1)
         raw_icon_scale = cfg.get('mapIconScale', SETTING_DEFAULTS['mapIconScale'])
@@ -248,12 +323,10 @@ class SettingsDialog(QDialog):
 
         _on_icon_scale(self._map_icon_scale.value())
         self._map_icon_scale.valueChanged.connect(_on_icon_scale)
-        icon_row.addWidget(icon_lbl)
-        icon_row.addWidget(self._map_icon_scale, 1)
-        icon_row.addWidget(self._map_icon_scale_val)
-        layout.addLayout(icon_row)
+        slider_block('Map icons', self._map_icon_scale_val, self._map_icon_scale,
+                     'Scales location markers while keeping automatic zoom-based sizing.')
 
-        section('Nearby')
+        section('Nearby', 'left')
         option('nearbyControlsEnabled', 'Enable nearby popup shortcuts',
                'Shift+N or LB+Down opens the nearby popup. In the popup: Up/Down, W/S, or D-pad moves, '
                'Enter, Space, or A toggles found, Esc or B closes.')
@@ -261,17 +334,15 @@ class SettingsDialog(QDialog):
                'When enabled, the nearby popup only shows locations from categories currently visible on the MapGenie map.')
         nearby_help = QLabel('LB+Down / Shift+N open. Up/Down, W/S, D-pad navigate. Enter/Space/A toggles. Esc/B closes.')
         nearby_help.setWordWrap(True)
-        nearby_help.setStyleSheet('color:#7c8db5; font:11px "Segoe UI"; margin-left:26px;')
-        layout.addWidget(nearby_help)
+        nearby_help.setStyleSheet(
+            'color:#7c8db5; font:11px "Segoe UI"; margin-left:26px; margin-top:-4px;')
+        active_layout[0].addWidget(nearby_help)
 
         # Scan radius
-        radius_row = QHBoxLayout()
-        radius_row.setSpacing(10)
-        radius_lbl = QLabel('Scan radius')
         self._nearby_radius_val = QLabel()
         self._nearby_radius_val.setStyleSheet(
             "color:#ffd060; font:13px 'Consolas'; min-width:40px;")
-        self._nearby_radius = QSlider(Qt.Horizontal)
+        self._nearby_radius = NoWheelSlider(Qt.Horizontal)
         self._nearby_radius.setRange(1, 8)
         self._nearby_radius.setSingleStep(1)
         raw = cfg.get('nearbyThreshold', SETTING_DEFAULTS['nearbyThreshold'])
@@ -279,17 +350,23 @@ class SettingsDialog(QDialog):
         self._nearby_radius_val.setText(str(self._nearby_radius.value()))
         self._nearby_radius.valueChanged.connect(
             lambda v: self._nearby_radius_val.setText(str(v)))
-        radius_row.addWidget(radius_lbl)
-        radius_row.addWidget(self._nearby_radius, 1)
-        radius_row.addWidget(self._nearby_radius_val)
-        layout.addLayout(radius_row)
+        slider_block('Scan radius', self._nearby_radius_val, self._nearby_radius)
 
         # Hotkey configurável
-        hk_row = QHBoxLayout()
-        hk_row.setSpacing(10)
         hk_lbl = QLabel('Open hotkey')
         self._nearby_hk = QKeySequenceEdit()
-        self._nearby_hk.setFixedHeight(28)
+        self._nearby_hk.setFixedHeight(32)
+        self._nearby_hk.setAttribute(Qt.WA_StyledBackground, True)
+        self._nearby_hk.setStyleSheet(
+            "QKeySequenceEdit{background:#e2e8f0;color:#111827;"
+            "border:1px solid #64748b;border-radius:6px;padding:4px 8px;"
+            "selection-background-color:#ffd060;selection-color:#111827;}"
+            "QKeySequenceEdit:focus{border:1px solid #ffd060;}")
+        hk_line = self._nearby_hk.findChild(QLineEdit)
+        if hk_line:
+            hk_line.setStyleSheet(
+                "QLineEdit{background:#e2e8f0;color:#111827;border:none;"
+                "selection-background-color:#ffd060;selection-color:#111827;}")
         self._nearby_hk.setToolTip('Restart overlay for the new hotkey to take effect')
         # Impede acúmulo de múltiplos atalhos: ao teclar de novo após finalizar, limpa primeiro
         self._nearby_hk._hk_finalized = False
@@ -332,19 +409,18 @@ class SettingsDialog(QDialog):
         except Exception:
             pass
         self._nearby_hk.setKeySequence(QKeySequence(_vk_to_seq_str(hk_vk, hk_mod)))
-        hk_row.addWidget(hk_lbl)
-        hk_row.addWidget(self._nearby_hk, 1)
-        layout.addLayout(hk_row)
+        active_layout[0].addWidget(hk_lbl)
+        active_layout[0].addWidget(self._nearby_hk)
         hk_note = QLabel('Restart required to apply hotkey change.')
-        hk_note.setStyleSheet('color:#555; font:10px "Segoe UI"; margin-left:0;')
-        layout.addWidget(hk_note)
+        hk_note.setStyleSheet('color:#64748b; font:11px "Segoe UI"; margin-top:-4px;')
+        active_layout[0].addWidget(hk_note)
 
         # Direction arrow
-        section('Performance')
+        section('Performance', 'right')
         option('disableGpuVsync', 'Disable GPU vsync (multi-monitor fix)',
                'Fixes FPS cap when using the overlay on a secondary monitor with a different refresh rate. Requires restart.')
 
-        section('Direction arrow')
+        section('Direction arrow', 'right')
         option('rotateWithPlayer', 'Rotate map with player',
                'The map rotates to always show the player\'s forward direction at the top')
         option('rotateWithCamera', 'Rotate map with camera',
@@ -353,11 +429,21 @@ class SettingsDialog(QDialog):
             lambda checked: checked and self._checkboxes['rotateWithCamera'].setChecked(False))
         self._checkboxes['rotateWithCamera'].toggled.connect(
             lambda checked: checked and self._checkboxes['rotateWithPlayer'].setChecked(False))
-        heading_row = QHBoxLayout()
-        heading_row.setSpacing(10)
-        heading_row.addWidget(QLabel('Source'))
+        active_layout[0].addWidget(QLabel('Source'))
         from PyQt5.QtWidgets import QComboBox
         self._heading_combo = QComboBox()
+        self._heading_combo.setFixedHeight(32)
+        self._heading_combo.setStyleSheet(
+            "QComboBox{background:#e2e8f0;color:#111827;border:1px solid #64748b;"
+            "border-radius:6px;padding:4px 30px 4px 8px;}"
+            "QComboBox:focus{border:1px solid #ffd060;}"
+            "QComboBox::drop-down{subcontrol-origin:padding;subcontrol-position:top right;"
+            "width:24px;border-left:1px solid #94a3b8;background:#cbd5e1;"
+            "border-top-right-radius:6px;border-bottom-right-radius:6px;}"
+            "QComboBox::down-arrow{image:none;width:0;height:0;}"
+            "QComboBox QAbstractItemView{background:#f8fafc;color:#111827;"
+            "selection-background-color:#ffd060;selection-color:#111827;"
+            "border:1px solid #475569;}")
         self._heading_combo.addItem('Auto (entity → delta)',  'auto')
         self._heading_combo.addItem('Forward vector (entity)', 'entity')
         self._heading_combo.addItem('Position delta',           'delta')
@@ -369,10 +455,10 @@ class SettingsDialog(QDialog):
             'auto: uses forward vector when available, falls back to delta\n'
             'entity: uses entity+0x80/0x88 only (works while standing still)\n'
             'delta: always computes from position difference')
-        heading_row.addWidget(self._heading_combo, 1)
-        layout.addLayout(heading_row)
+        active_layout[0].addWidget(self._heading_combo)
 
-        layout.addSpacing(14)
+        left_col.addStretch(1)
+        right_col.addStretch(1)
 
         btn_row = QHBoxLayout()
         cancel_btn = QPushButton('Cancel')
@@ -382,7 +468,7 @@ class SettingsDialog(QDialog):
         save_btn.clicked.connect(self.accept)
         btn_row.addWidget(cancel_btn)
         btn_row.addWidget(save_btn)
-        layout.addLayout(btn_row)
+        outer_layout.addLayout(btn_row)
 
     def _on_cancel(self):
         if self.parent():

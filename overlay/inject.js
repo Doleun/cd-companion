@@ -16,6 +16,7 @@
   const WS_URL = '$WS_URL';
   const RECONNECT_MS = 3000;
   const CENTER_TELEPORT_Y_KEY = 'cd_center_teleport_y';
+  const NEARBY_RESPECT_MAP_VISIBILITY_KEY = 'cd_nearby_respect_map_visibility';
   const CLIENT_ID = (window.crypto && typeof window.crypto.randomUUID === 'function')
     ? window.crypto.randomUUID()
     : `overlay-${Date.now()}-${Math.random().toString(16).slice(2)}`;
@@ -704,8 +705,25 @@
     const v = window.__cdSettings && window.__cdSettings.nearbyThreshold;
     return (typeof v === 'number' && v > 0) ? v : 0.005;
   }
+  function _nearbyRespectMapVisibility() {
+    try {
+      const saved = localStorage.getItem(NEARBY_RESPECT_MAP_VISIBILITY_KEY);
+      if (saved === '1') return true;
+      if (saved === '0') return false;
+    } catch (_) {}
+    return !(window.__cdSettings && window.__cdSettings.nearbyRespectMapVisibility === false);
+  }
+  function _setNearbyRespectMapVisibility(value) {
+    const enabled = !!value;
+    if (!window.__cdSettings) window.__cdSettings = {};
+    window.__cdSettings.nearbyRespectMapVisibility = enabled;
+    try {
+      localStorage.setItem(NEARBY_RESPECT_MAP_VISIBILITY_KEY, enabled ? '1' : '0');
+    } catch (_) {}
+    return enabled;
+  }
   function _isMapGenieCategoryVisible(categoryId) {
-    if (window.__cdSettings && window.__cdSettings.nearbyRespectMapVisibility === false) return true;
+    if (!_nearbyRespectMapVisibility()) return true;
     const categoriesMap = window.__cdMapGeniePatch?.categories?.categoriesMap;
     if (!categoriesMap || categoryId === undefined || categoryId === null) return true;
     const category = categoriesMap[String(categoryId)];
@@ -870,6 +888,11 @@
     }
   }
 
+  function _sortNearbyItems(a, b) {
+    if (a.found !== b.found) return a.found ? 1 : -1;
+    return a.dist - b.dist;
+  }
+
   function getNearbyLocations() {
     if (!lastPos || !map) return [];
     try {
@@ -897,7 +920,7 @@
           });
           return acc;
         }, [])
-        .sort((a, b) => a.dist - b.dist);
+        .sort(_sortNearbyItems);
     } catch (_) { return []; }
   }
 
@@ -927,10 +950,11 @@
     let items = getNearbyLocations();
 
     nearbyPopup = window.open('', 'cdNearbyLocations',
-      'width=680,height=460,resizable=yes,scrollbars=no');
+      'width=860,height=460,resizable=yes,scrollbars=no');
     if (!nearbyPopup) return;
 
     let selectedIndex = 0;
+    let activeFoundList = items.some(item => !item.found) ? false : items.some(item => item.found);
     let lastDetailsId = null;
     let lastDetailsFound = null;
     const doc = nearbyPopup.document;
@@ -953,8 +977,18 @@
       display:flex;align-items:center;gap:8px;flex-shrink:0}
     .header-title{flex:1;font-size:13px;font-weight:600;color:#ffd060}
     .header-count{font-size:11px;color:#555}
+    .header-toggle{height:24px;padding:0 9px;border-radius:4px;border:1px solid rgba(255,208,96,.28);background:rgba(255,208,96,.08);color:#cfc4ad;font:10px 'Segoe UI',sans-serif;cursor:pointer;white-space:nowrap}
+    .header-toggle.on{border-color:rgba(96,232,144,.45);background:rgba(96,232,144,.12);color:#60e890}
+    .header-toggle.off{border-color:rgba(255,255,255,.12);background:rgba(255,255,255,.04);color:#777}
     .content{flex:1;min-height:0;display:flex}
-    .list{width:320px;flex-shrink:0;overflow-y:auto;padding:4px;border-right:1px solid rgba(255,255,255,.07)}
+    .lists{width:430px;flex-shrink:0;display:flex;min-width:0;border-right:1px solid rgba(255,255,255,.07)}
+    .list-pane{width:50%;min-width:0;display:flex;flex-direction:column;border-right:1px solid rgba(255,255,255,.06);background:rgba(10,10,15,.72)}
+    .list-pane:last-child{border-right:0}
+    .list-head{height:30px;display:flex;align-items:center;justify-content:space-between;gap:8px;padding:0 9px;border-bottom:1px solid rgba(255,255,255,.06);font-size:10px;text-transform:uppercase;letter-spacing:.04em;color:#6e7280}
+    .list-pane.active .list-head{background:rgba(255,208,96,.08);color:#ffd060}
+    .list-count{color:#555}
+    .list-pane.active .list-count{color:#a88d40}
+    .list{flex:1;min-height:0;overflow-y:auto;padding:4px}
     .details{flex:1;min-width:0;overflow-y:auto;background:rgba(8,8,12,.96)}
     .details-empty{height:100%;display:flex;align-items:center;justify-content:center;color:#555;font-size:12px}
     .detail-media{height:155px;background:#07070a;border-bottom:1px solid rgba(255,208,96,.25);display:flex;align-items:center;justify-content:center;overflow:hidden}
@@ -969,8 +1003,9 @@
     .detail-found{margin-top:12px;padding-top:10px;border-top:1px solid rgba(255,208,96,.25);display:flex;align-items:center;justify-content:center;gap:8px;text-transform:uppercase;font-weight:700;color:#ddd}
     .detail-box{width:20px;height:20px;border:2px solid rgba(255,208,96,.45);display:flex;align-items:center;justify-content:center;color:#60e890}
     .empty{padding:24px;text-align:center;color:#555;font-size:12px}
+    .empty.small{padding:18px 8px;font-size:11px}
     .item{display:flex;align-items:center;gap:8px;
-      padding:6px 10px;border-radius:5px;cursor:pointer;
+      padding:6px 7px;border-radius:5px;cursor:pointer;
       border:1px solid transparent;margin-bottom:2px}
     .item.selected{background:rgba(255,208,96,.12);border-color:rgba(255,208,96,.4)}
     .item:not(.selected):hover{background:rgba(255,255,255,.04)}
@@ -978,9 +1013,9 @@
     .found .check{color:#60e890}
     .notfound .check{color:#444}
     .item-name{flex:1;overflow:hidden;display:flex;flex-direction:column;gap:2px}
-    .item-icon-wrap{position:relative;width:36px;height:36px;flex-shrink:0;align-self:center;display:flex;align-items:center;justify-content:center;overflow:visible}
-    .item-icon-wrap .icon{transform:scale(1.8);transform-origin:center}
-    .item-badge{position:absolute;bottom:3px;right:6px;width:14px;height:14px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:9px;font-weight:bold;line-height:1;border:1.5px solid #0f0f1a}
+    .item-icon-wrap{position:relative;width:30px;height:32px;flex-shrink:0;align-self:center;display:flex;align-items:center;justify-content:center;overflow:visible}
+    .item-icon-wrap .icon{transform:scale(1.55);transform-origin:center}
+    .item-badge{position:absolute;bottom:2px;right:1px;width:13px;height:13px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:8px;font-weight:bold;line-height:1;border:1.5px solid #0f0f1a}
     .found .item-badge{background:rgba(96,232,144,.95);color:#0a1a0a}
     .notfound .item-badge{background:rgba(20,20,30,.9);color:#555;border-color:#333}
     .item-title{font-size:12px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
@@ -988,7 +1023,7 @@
     .notfound .item-title{color:#999}
     .item-cat{font-size:10px;color:#4a5568;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
     .selected .item-cat{color:#718096}
-    .item-dist{font-size:10px;color:#555;flex-shrink:0;min-width:28px;text-align:right;align-self:center}
+    .item-dist{font-size:10px;color:#555;flex-shrink:0;min-width:26px;text-align:right;align-self:center}
     .selected .item-dist{color:#888}
     .footer{padding:5px 12px;border-top:1px solid rgba(255,255,255,.07);
       flex-shrink:0;font-size:10px;color:#444;display:flex;gap:14px}
@@ -1000,14 +1035,26 @@
     <div class="header">
       <div class="header-title">📍 Nearby</div>
       <div class="header-count" id="hcount"></div>
+      <button class="header-toggle" id="mapFilterToggle" title="Respect the categories currently visible on the map">Map filters</button>
     </div>
     <div class="content">
-      <div class="list" id="list"></div>
+      <div class="lists">
+        <div class="list-pane" id="notfoundPane">
+          <div class="list-head"><span>Not found</span><span class="list-count" id="notfoundCount"></span></div>
+          <div class="list" id="notfoundList"></div>
+        </div>
+        <div class="list-pane" id="foundPane">
+          <div class="list-head"><span>Found</span><span class="list-count" id="foundCount"></span></div>
+          <div class="list" id="foundList"></div>
+        </div>
+      </div>
       <div class="details" id="details"></div>
     </div>
     <div class="footer">
+      <span style="margin-right: 5px"><b>Left/Right</b> List</span>
       <span style="margin-right: 5px"><b>Up/Down, W/S, D-pad</b> Navigate</span>
       <span style="margin-right: 5px"><b>Enter, Space, A</b> Mark</span>
+      <span style="margin-right: 5px"><b>Select/View</b> Filters</span>
       <span><b>Esc, B</b> Close</span>
     </div>
   </div>
@@ -1020,7 +1067,24 @@
 </html>`);
     doc.close();
 
-    function render() {
+    function syncMapFilterToggle() {
+      const btn = doc.getElementById('mapFilterToggle');
+      if (!btn) return;
+      const enabled = _nearbyRespectMapVisibility();
+      btn.className = `header-toggle ${enabled ? 'on' : 'off'}`;
+      btn.textContent = enabled ? 'Map filters ON' : 'Map filters OFF';
+      btn.title = enabled
+        ? 'Nearby follows the categories currently visible on the map'
+        : 'Nearby shows all categories, ignoring map category visibility';
+    }
+
+    function toggleMapFilterMode() {
+      _setNearbyRespectMapVisibility(!_nearbyRespectMapVisibility());
+      syncMapFilterToggle();
+      refreshNearbyItems();
+    }
+
+    function renderLegacySingleList() {
       const list   = doc.getElementById('list');
       const hcount = doc.getElementById('hcount');
       if (!list) return;
@@ -1032,6 +1096,7 @@
         return;
       }
       if (hcount) hcount.textContent = `${items.length} location${items.length !== 1 ? 's' : ''}`;
+      syncMapFilterToggle();
 
       // Fingerprint: skip render se ids, found e seleção não mudaram
       const fp = items.map(it => `${it.id}:${it.found}`).join(',') + '|' + selectedIndex;
@@ -1105,12 +1170,157 @@
       syncSelectedNearby(false);
     }
 
+    function selectedNearbyItem() {
+      return items[selectedIndex] || null;
+    }
+
+    function nearbyGroup(found) {
+      return items.filter(item => !!item.found === !!found);
+    }
+
+    function selectedGroupIndex() {
+      const item = selectedNearbyItem();
+      if (!item) return -1;
+      return nearbyGroup(!!item.found).findIndex(groupItem => groupItem.id === item.id);
+    }
+
+    function selectNearbyGroupIndex(found, groupIndex, shouldPan) {
+      const group = nearbyGroup(found);
+      if (!group.length) return;
+      const nextGroupIndex = Math.max(0, Math.min(groupIndex, group.length - 1));
+      const nextItem = group[nextGroupIndex];
+      const nextIndex = items.findIndex(item => item.id === nextItem.id);
+      const changed = nextIndex !== selectedIndex || activeFoundList !== !!found;
+      activeFoundList = !!found;
+      selectedIndex = nextIndex >= 0 ? nextIndex : selectedIndex;
+      if (changed || shouldPan) syncSelectedNearby(shouldPan);
+    }
+
+    function ensureNearbySelection() {
+      if (!items.length) {
+        selectedIndex = 0;
+        activeFoundList = false;
+        return;
+      }
+      if (selectedIndex < 0 || selectedIndex >= items.length) selectedIndex = 0;
+      const item = selectedNearbyItem();
+      if (item) {
+        activeFoundList = !!item.found;
+        return;
+      }
+      activeFoundList = nearbyGroup(false).length ? false : true;
+      selectNearbyGroupIndex(activeFoundList, 0, false);
+    }
+
+    function moveNearbyVertical(delta) {
+      if (!items.length) return;
+      const current = Math.max(0, selectedGroupIndex());
+      selectNearbyGroupIndex(activeFoundList, current + delta, true);
+      render();
+    }
+
+    function moveNearbyHorizontal(delta) {
+      if (!items.length) return;
+      const targetFound = delta > 0;
+      if (targetFound === activeFoundList) return;
+      const targetGroup = nearbyGroup(targetFound);
+      if (!targetGroup.length) return;
+      const current = Math.max(0, selectedGroupIndex());
+      selectNearbyGroupIndex(targetFound, Math.min(current, targetGroup.length - 1), true);
+      render();
+    }
+
+    function renderList(list, group) {
+      if (!list) return;
+      if (!group.length) {
+        list.innerHTML = '<div class="empty small">No locations</div>';
+        return;
+      }
+
+      list.querySelectorAll('.empty').forEach(el => el.remove());
+      const existing = {};
+      list.querySelectorAll('.item[data-id]').forEach(el => { existing[el.dataset.id] = el; });
+      const newIds = new Set(group.map(it => it.id));
+      Object.keys(existing).forEach(id => { if (!newIds.has(id)) existing[id].remove(); });
+
+      function buildItemEl(item) {
+        const el = doc.createElement('div');
+        el.dataset.id = item.id;
+        el.addEventListener('click', () => {
+          const nextIndex = items.findIndex(it => it.id === item.id);
+          if (nextIndex >= 0) selectNearbyIndex(nextIndex, true);
+          render();
+          doToggle();
+        });
+        return el;
+      }
+
+      group.forEach(item => {
+        const i = items.findIndex(it => it.id === item.id);
+        const cls = item.found ? 'found' : 'notfound';
+        const sel = i === selectedIndex ? ' selected' : '';
+        const cat = item.category;
+        const badge = `<span class="item-badge">${item.found ? '✓' : '○'}</span>`;
+        const iconName = String(cat?.icon || '').replace(/[^a-z0-9_-]/gi, '');
+        const iconHtml = cat?.icon
+          ? `<div class="item-icon-wrap"><span class="icon icon-${iconName}"></span>${badge}</div>` : '';
+        const catHtml = cat ? `<div class="item-cat">${_escapeHtml(cat.title)}</div>` : '';
+        const el = existing[item.id] || buildItemEl(item);
+        el.className = `item ${cls}${sel}`;
+        el.innerHTML = `
+          ${iconHtml || `<div class="check">${item.found ? '✓' : '○'}</div>`}
+          <div class="item-name">
+            <div class="item-title" title="${_escapeHtml(item.title)}">${_escapeHtml(item.title)}</div>
+            ${catHtml}
+          </div>
+          <div class="item-dist">${(item.dist * 1000).toFixed(1)}</div>`;
+        list.appendChild(el);
+      });
+    }
+
+    function render() {
+      const notfoundList = doc.getElementById('notfoundList');
+      const foundList = doc.getElementById('foundList');
+      const notfoundPane = doc.getElementById('notfoundPane');
+      const foundPane = doc.getElementById('foundPane');
+      const notfoundCount = doc.getElementById('notfoundCount');
+      const foundCount = doc.getElementById('foundCount');
+      const hcount = doc.getElementById('hcount');
+      if (!notfoundList || !foundList) return;
+
+      syncMapFilterToggle();
+      ensureNearbySelection();
+      const notfoundItems = nearbyGroup(false);
+      const foundItems = nearbyGroup(true);
+      if (hcount) hcount.textContent = `${items.length} location${items.length !== 1 ? 's' : ''}`;
+      if (notfoundCount) notfoundCount.textContent = String(notfoundItems.length);
+      if (foundCount) foundCount.textContent = String(foundItems.length);
+      if (notfoundPane) notfoundPane.classList.toggle('active', !activeFoundList);
+      if (foundPane) foundPane.classList.toggle('active', activeFoundList);
+
+      if (items.length === 0) {
+        notfoundList.innerHTML = '<div class="empty small">No location nearby</div>';
+        foundList.innerHTML = '<div class="empty small">No location nearby</div>';
+        if (hcount) hcount.textContent = '';
+        renderDetails(null);
+        clearNearbySelection(false);
+        return;
+      }
+
+      renderList(notfoundList, notfoundItems);
+      renderList(foundList, foundItems);
+      const selEl = (activeFoundList ? foundList : notfoundList).querySelector('.selected');
+      if (selEl) selEl.scrollIntoView({ block: 'nearest' });
+      renderDetails(selectedNearbyItem());
+      syncSelectedNearby(false);
+    }
+
     function syncSelectedNearby(shouldPan) {
       if (!items.length) {
         clearNearbySelection(false);
         return;
       }
-      updateNearbySelection(items[selectedIndex], shouldPan);
+      updateNearbySelection(selectedNearbyItem(), shouldPan);
     }
 
     function selectNearbyIndex(index, shouldPan) {
@@ -1118,6 +1328,7 @@
       const nextIndex = Math.max(0, Math.min(index, items.length - 1));
       const changed = nextIndex !== selectedIndex;
       selectedIndex = nextIndex;
+      activeFoundList = !!items[selectedIndex]?.found;
       if (changed || shouldPan) syncSelectedNearby(shouldPan);
     }
 
@@ -1156,17 +1367,41 @@
     }
 
     function refreshNearbyItems() {
-      const selectedId = items[selectedIndex]?.id || null;
+      const selectedId = selectedNearbyItem()?.id || null;
+      const previousGroupIndex = Math.max(0, selectedGroupIndex());
       items = getNearbyLocations();
       if (selectedId) {
         const nextIndex = items.findIndex(item => item.id === selectedId);
-        selectedIndex = nextIndex >= 0
-          ? nextIndex
-          : Math.min(selectedIndex, Math.max(items.length - 1, 0));
+        if (nextIndex >= 0) {
+          selectedIndex = nextIndex;
+          activeFoundList = !!items[selectedIndex].found;
+        } else if (nearbyGroup(activeFoundList).length) {
+          selectNearbyGroupIndex(activeFoundList, previousGroupIndex, false);
+        } else {
+          activeFoundList = nearbyGroup(false).length ? false : true;
+          selectNearbyGroupIndex(activeFoundList, 0, false);
+        }
       } else {
-        selectedIndex = Math.min(selectedIndex, Math.max(items.length - 1, 0));
+        activeFoundList = nearbyGroup(false).length ? false : true;
+        selectNearbyGroupIndex(activeFoundList, 0, false);
       }
       render();
+    }
+
+    const mapFilterToggle = doc.getElementById('mapFilterToggle');
+    if (mapFilterToggle) {
+      mapFilterToggle.addEventListener('click', (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        toggleMapFilterMode();
+      });
+      mapFilterToggle.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter' || e.key === ' ') {
+          e.preventDefault();
+          e.stopPropagation();
+          toggleMapFilterMode();
+        }
+      });
     }
 
     function doToggle() {
@@ -1179,6 +1414,9 @@
       if (typeof window.mapManager?.markLocationAsFound === 'function') {
         window.mapManager.markLocationAsFound(parseInt(item.id, 10), item.found);
       }
+      items.sort(_sortNearbyItems);
+      selectedIndex = items.findIndex(nextItem => nextItem.id === item.id);
+      activeFoundList = !!item.found;
       render();
     }
 
@@ -1195,15 +1433,17 @@
       if (action === 'close') {
         closeNearbyPopup();
       } else if (action === 'down') {
-        if (!items.length) return;
-        selectNearbyIndex(selectedIndex + 1, true);
-        render();
+        moveNearbyVertical(1);
       } else if (action === 'up') {
-        if (!items.length) return;
-        selectNearbyIndex(selectedIndex - 1, true);
-        render();
+        moveNearbyVertical(-1);
+      } else if (action === 'left') {
+        moveNearbyHorizontal(-1);
+      } else if (action === 'right') {
+        moveNearbyHorizontal(1);
       } else if (action === 'toggle') {
         doToggle();
+      } else if (action === 'filter') {
+        toggleMapFilterMode();
       }
     };
 
@@ -1214,14 +1454,16 @@
       }
       if (e.key === 'ArrowDown' || e.key.toLowerCase() === 's') {
         e.preventDefault();
-        if (!items.length) return;
-        selectNearbyIndex(selectedIndex + 1, true);
-        render();
+        moveNearbyVertical(1);
       } else if (e.key === 'ArrowUp' || e.key.toLowerCase() === 'w') {
         e.preventDefault();
-        if (!items.length) return;
-        selectNearbyIndex(selectedIndex - 1, true);
-        render();
+        moveNearbyVertical(-1);
+      } else if (e.key === 'ArrowLeft') {
+        e.preventDefault();
+        moveNearbyHorizontal(-1);
+      } else if (e.key === 'ArrowRight') {
+        e.preventDefault();
+        moveNearbyHorizontal(1);
       } else if (e.key === 'Enter' || e.key === ' ') {
         e.preventDefault();
         doToggle();
@@ -1242,13 +1484,14 @@
     }, NEARBY_REFRESH_MS);
 
     render();
+    syncMapFilterToggle();
     syncSelectedNearby(true);
     updateNearbyCircle();
     // Delay para Qt processar a criação da janela antes de focar
     setTimeout(() => {
       try {
         if (nearbyPopup && !nearbyPopup.closed) {
-          nearbyPopup.resizeTo(680, 460);
+          nearbyPopup.resizeTo(860, 460);
           nearbyPopup.focus();
         }
       } catch (_) {}
