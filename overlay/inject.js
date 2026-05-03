@@ -45,70 +45,6 @@
   let waypointFilter  = '';
   let hasPreTeleport  = false;
   let teleportEnabled = !(window.__cdSettings && window.__cdSettings.teleportEnabled === false);
-  let pendingPosition = null;
-  let pendingCameraHeading = null;
-  let pendingMapMarker = null;
-  let pendingMapMarkerCleared = false;
-  let realtimeFlushScheduled = false;
-  let realtimeStats = null;
-  let cameraHeadingDebugStats = null;
-
-  function realtimeDebugEnabled() {
-    try {
-      return window.__cdDebugRealtime === true ||
-        localStorage.getItem('cd_debug_realtime') === '1';
-    } catch (_) {
-      return window.__cdDebugRealtime === true;
-    }
-  }
-
-  function recordCameraHeadingDebug(msg) {
-    if (!realtimeDebugEnabled() || typeof msg.heading !== 'number') return;
-    const now = performance.now();
-    if (!cameraHeadingDebugStats) {
-      cameraHeadingDebugStats = {
-        recv: 0,
-        changed: 0,
-        duplicate: 0,
-        gapSum: 0,
-        gapCount: 0,
-        maxGap: 0,
-        lastHeading: null,
-        lastEventAt: null,
-        lastLog: now
-      };
-    }
-    const s = cameraHeadingDebugStats;
-    s.recv += 1;
-    if (s.lastEventAt !== null) {
-      const gap = now - s.lastEventAt;
-      s.gapSum += gap;
-      s.gapCount += 1;
-      s.maxGap = Math.max(s.maxGap, gap);
-    }
-    s.lastEventAt = now;
-    if (s.lastHeading === msg.heading) s.duplicate += 1;
-    else s.changed += 1;
-    s.lastHeading = msg.heading;
-
-    if (now - s.lastLog >= 1000) {
-      const avgGap = s.gapCount ? s.gapSum / s.gapCount : 0;
-      console.info(
-        `[CD realtime overlay] camera_heading recv=${s.recv} ` +
-        `changed=${s.changed} duplicate=${s.duplicate} ` +
-        `last=${s.lastHeading} avgGap=${avgGap.toFixed(1)}ms ` +
-        `maxGap=${s.maxGap.toFixed(1)}ms`
-      );
-      s.recv = 0;
-      s.changed = 0;
-      s.duplicate = 0;
-      s.gapSum = 0;
-      s.gapCount = 0;
-      s.maxGap = 0;
-      s.lastLog = now;
-    }
-  }
-
   document.addEventListener('keydown', (e) => { if (e.key === 'Shift') shiftHeld = true;  });
   document.addEventListener('keyup',   (e) => { if (e.key === 'Shift') shiftHeld = false; });
 
@@ -412,7 +348,6 @@
 
   function onCameraHeading(msg) {
     if (typeof msg.heading !== 'number') return;
-    recordCameraHeadingDebug(msg);
     if (hasCameraHeading && msg.heading === lastCameraHeading) return;
     hasCameraHeading = true;
     lastCameraHeading = msg.heading;
@@ -426,12 +361,13 @@
     }
     updateArrowRotation();
     const mm = getMap();
-    if (!mm) return;
-    const view = { bearing: lastCameraHeading };
-    if (following && !shiftHeld && lastPos && !nearbySelectionActive) {
-      view.center = [lastPos.lng, lastPos.lat];
+    if (mm) {
+      const view = { bearing: lastCameraHeading };
+      if (following && !shiftHeld && lastPos && !nearbySelectionActive) {
+        view.center = [lastPos.lng, lastPos.lat];
+      }
+      liveEaseTo(mm, view);
     }
-    liveEaseTo(mm, view);
   }
 
   // ── Botão flutuante status (direita) — toggle follow + expandir ───
@@ -1580,89 +1516,19 @@
     if (ei) ei.style.display = 'none';
   }
 
-  function scheduleRealtimeFlush() {
-    if (realtimeFlushScheduled) return;
-    realtimeFlushScheduled = true;
-    requestAnimationFrame(() => {
-      realtimeFlushScheduled = false;
-      const pos = pendingPosition;
-      const cam = pendingCameraHeading;
-      const markerMsg = pendingMapMarker;
-      const clearMarker = pendingMapMarkerCleared;
-      pendingPosition = null;
-      pendingCameraHeading = null;
-      pendingMapMarker = null;
-      pendingMapMarkerCleared = false;
-
-      if (pos) handlePositionMessage(pos);
-      if (cam) onCameraHeading(cam);
-      if (markerMsg) handleMapMarkerMessage(markerMsg);
-      else if (clearMarker) handleMapMarkerCleared();
+  function processRealtimeEvents(events) {
+    if (!Array.isArray(events)) return;
+    events.forEach(function(ev) {
+      if (ev.type === 'position') {
+        handlePositionMessage(ev);
+      } else if (ev.type === 'camera_heading') {
+        onCameraHeading(ev);
+      } else if (ev.type === 'map_marker') {
+        handleMapMarkerMessage(ev);
+      } else if (ev.type === 'map_marker_cleared') {
+        handleMapMarkerCleared();
+      }
     });
-  }
-
-  function queueRealtimeEvent(msg) {
-    if (msg.type === 'position') {
-      pendingPosition = msg;
-      return true;
-    }
-    if (msg.type === 'camera_heading') {
-      pendingCameraHeading = msg;
-      return true;
-    }
-    if (msg.type === 'map_marker') {
-      pendingMapMarker = msg;
-      pendingMapMarkerCleared = false;
-      return true;
-    }
-    if (msg.type === 'map_marker_cleared') {
-      pendingMapMarker = null;
-      pendingMapMarkerCleared = true;
-      return true;
-    }
-    return false;
-  }
-
-  function recordRealtimeArrival(frame) {
-    if (typeof frame.sentAt !== 'number') return;
-    const now = Date.now();
-    const latency = now - frame.sentAt;
-    if (!realtimeStats) {
-      realtimeStats = {
-        count: 0,
-        lost: 0,
-        max: 0,
-        sum: 0,
-        samples: [],
-        lastSeq: null,
-        lastLog: now
-      };
-    }
-    if (typeof frame.seq === 'number' && realtimeStats.lastSeq !== null) {
-      const gap = frame.seq - realtimeStats.lastSeq;
-      if (gap > 1) realtimeStats.lost += gap - 1;
-    }
-    if (typeof frame.seq === 'number') realtimeStats.lastSeq = frame.seq;
-    realtimeStats.count += 1;
-    realtimeStats.sum += latency;
-    realtimeStats.max = Math.max(realtimeStats.max, latency);
-    realtimeStats.samples.push(latency);
-    if (realtimeStats.samples.length > 240) realtimeStats.samples.shift();
-    if (now - realtimeStats.lastLog >= 2000) {
-      const sorted = realtimeStats.samples.slice().sort((a, b) => a - b);
-      const p95 = sorted.length ? sorted[Math.floor((sorted.length - 1) * 0.95)] : 0;
-      const avg = realtimeStats.count ? realtimeStats.sum / realtimeStats.count : 0;
-      console.info(
-        `[CD overlay realtime] avg=${avg.toFixed(1)}ms p95=${p95.toFixed(1)}ms ` +
-        `max=${realtimeStats.max.toFixed(1)}ms lost=${realtimeStats.lost}`
-      );
-      realtimeStats.count = 0;
-      realtimeStats.lost = 0;
-      realtimeStats.max = 0;
-      realtimeStats.sum = 0;
-      realtimeStats.samples = [];
-      realtimeStats.lastLog = now;
-    }
   }
 
   function connect() {
@@ -1672,7 +1538,7 @@
       sendCmd({
         cmd: 'client_options',
         clientName: 'overlay',
-        realtimeBundle: false,
+        realtimeBundle: true,
         nativeRealtime: NATIVE_REALTIME
       });
       updatePanel();
@@ -1684,18 +1550,13 @@
         const msg = JSON.parse(e.data);
 
         if (msg.type === 'realtime' && Array.isArray(msg.events)) {
-          recordRealtimeArrival(msg);
-          let queued = false;
-          msg.events.forEach((event) => { queued = queueRealtimeEvent(event) || queued; });
-          if (queued) scheduleRealtimeFlush();
+          processRealtimeEvents(msg.events);
 
         } else if (msg.type === 'position') {
-          pendingPosition = msg;
-          scheduleRealtimeFlush();
+          handlePositionMessage(msg);
 
         } else if (msg.type === 'camera_heading') {
-          pendingCameraHeading = msg;
-          scheduleRealtimeFlush();
+          onCameraHeading(msg);
 
         } else if (msg.type === 'waypoints') {
           waypoints = msg.data || [];
@@ -1730,20 +1591,15 @@
           panToLocationId(msg.locationId);
 
         } else if (msg.type === 'map_marker') {
-          pendingMapMarker = msg;
-          pendingMapMarkerCleared = false;
-          scheduleRealtimeFlush();
+          handleMapMarkerMessage(msg);
 
         } else if (msg.type === 'map_marker_cleared') {
-          pendingMapMarker = null;
-          pendingMapMarkerCleared = true;
-          scheduleRealtimeFlush();
+          handleMapMarkerCleared();
         }
 
         // backward-compat: mensagens sem type são posição
         if (!msg.type && typeof msg.lng === 'number') {
-          pendingPosition = msg;
-          scheduleRealtimeFlush();
+          handlePositionMessage(msg);
         }
       } catch (_) {}
     };
@@ -1751,10 +1607,7 @@
 
   window.__cdNativeRealtime = function(frame) {
     if (!frame || !Array.isArray(frame.events)) return;
-    recordRealtimeArrival(frame);
-    let queued = false;
-    frame.events.forEach((event) => { queued = queueRealtimeEvent(event) || queued; });
-    if (queued) scheduleRealtimeFlush();
+    processRealtimeEvents(frame.events);
   };
 
   // ── Botão flutuante para abrir/fechar waypoints ───────────────────

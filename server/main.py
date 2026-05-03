@@ -265,7 +265,6 @@ def _save_waypoints(waypoints):
 _clients: set = set()
 _client_locks: dict = {}    # websocket → asyncio.Lock (serializa sends)
 _client_options: dict = {}  # websocket -> opcoes negociadas pelo cliente
-_client_realtime_stats: dict = {}
 _realtime_seq: int = 0
 _latest_realtime_lock = threading.Lock()
 _latest_realtime_frame = None
@@ -327,28 +326,6 @@ def _client_label(client):
     remote = getattr(client, "remote_address", None)
     return f"{name}@{remote}" if remote else name
 
-def _record_realtime_send(client, events):
-    if os.environ.get('CD_DEBUG_REALTIME') != '1':
-        return
-    camera_count = sum(1 for event in events if event.get("type") == "camera_heading")
-    if not camera_count:
-        return
-    now = time.monotonic()
-    stats = _client_realtime_stats.setdefault(client, {
-        "camera": 0,
-        "frames": 0,
-        "last_log": now,
-    })
-    stats["camera"] += camera_count
-    stats["frames"] += 1
-    if now - stats["last_log"] >= 1.0:
-        log.info(
-            "Realtime send %s camera=%d frames=%d",
-            _client_label(client), stats["camera"], stats["frames"])
-        stats["camera"] = 0
-        stats["frames"] = 0
-        stats["last_log"] = now
-
 def _make_realtime_frame(events: list):
     global _realtime_seq
     _realtime_seq += 1
@@ -383,7 +360,6 @@ async def _broadcast_realtime(events: list):
         opts = _client_options.get(client, {})
         if opts.get("native_realtime"):
             continue
-        _record_realtime_send(client, events)
         if opts.get("realtime_bundle"):
             tasks.append(_safe_send(client, bundled_msg))
         else:
@@ -413,7 +389,6 @@ async def _handle_client(websocket):
     _clients.add(websocket)
     _client_locks[websocket] = asyncio.Lock()
     _client_options[websocket] = {}
-    _client_realtime_stats[websocket] = {}
     log.info("Client connected  (%d total)", len(_clients))
 
     # Enviar waypoints salvos ao conectar
@@ -614,7 +589,6 @@ async def _handle_client(websocket):
         _clients.discard(websocket)
         _client_locks.pop(websocket, None)
         _client_options.pop(websocket, None)
-        _client_realtime_stats.pop(websocket, None)
         log.info("Client disconnected  (%d total)", len(_clients))
 
 async def _broadcast_status(status: str):

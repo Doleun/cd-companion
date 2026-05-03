@@ -21,7 +21,6 @@ import os
 import subprocess
 import sys
 import threading
-
 from PyQt5.QtCore import Qt, QUrl, QTimer, pyqtSignal, QObject
 from PyQt5.QtWidgets import QApplication
 from PyQt5.QtGui import QCursor
