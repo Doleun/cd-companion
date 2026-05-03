@@ -21,7 +21,6 @@ import os
 import subprocess
 import sys
 import threading
-
 from PyQt5.QtCore import Qt, QUrl, QTimer, pyqtSignal, QObject
 from PyQt5.QtWidgets import QApplication
 from PyQt5.QtGui import QCursor
@@ -232,6 +231,13 @@ class OverlayWindow(QMainWindow):
 
         self._view.loadFinished.connect(self._on_load_finished)
         self._view.load(QUrl(url))
+        self._native_realtime_enabled = (
+            cfg.get('realtimeTransport', SETTING_DEFAULTS['realtimeTransport']) == 'native'
+        )
+        self._last_native_realtime_seq = None
+        self._native_realtime_timer = QTimer(self)
+        self._native_realtime_timer.setInterval(16)
+        self._native_realtime_timer.timeout.connect(self._push_native_realtime)
 
         # ── Timer de hover para mostrar/ocultar a barra ────────────────
         self._hover_timer = QTimer(self)
@@ -548,9 +554,36 @@ class OverlayWindow(QMainWindow):
         if ok:
             cfg = load_config()
             settings = {k: cfg.get(k, v) for k, v in SETTING_DEFAULTS.items()}
+            self._native_realtime_enabled = (
+                settings.get('realtimeTransport') == 'native')
+            self._last_native_realtime_seq = None
             self._view.page().runJavaScript(
-                f'window.__cdSettings = {json.dumps(settings)};')
+                f'window.__cdSettings = {json.dumps(settings)};'
+                f'window.__cdNativeRealtimeEnabled = '
+                f'{json.dumps(self._native_realtime_enabled)};')
             self._view.page().runJavaScript(INJECT_JS)
+            if self._native_realtime_enabled:
+                self._native_realtime_timer.start()
+            else:
+                self._native_realtime_timer.stop()
+
+    def _push_native_realtime(self):
+        if not self._native_realtime_enabled:
+            return
+        try:
+            from server.main import get_latest_realtime_frame
+            frame = get_latest_realtime_frame()
+        except Exception:
+            return
+        if not frame:
+            return
+        seq = frame.get("seq")
+        if seq == self._last_native_realtime_seq:
+            return
+        self._last_native_realtime_seq = seq
+        payload = json.dumps(frame, separators=(',', ':'))
+        self._view.page().runJavaScript(
+            f'window.__cdNativeRealtime && window.__cdNativeRealtime({payload});')
 
     def _toggle_visible(self):
         if self.isVisible():
