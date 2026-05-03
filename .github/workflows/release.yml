@@ -62,10 +62,6 @@ jobs:
           $parts = $raw -split '\.' | ForEach-Object { [int]$_ }
           $ver = $parts -join '.'
           "version=$ver" >> $env:GITHUB_OUTPUT
-          $content = Get-Content -Path NEXUS_RELEASE_NOTES.md -Raw
-          "notes<<EOF" >> $env:GITHUB_OUTPUT
-          $content >> $env:GITHUB_OUTPUT
-          "EOF" >> $env:GITHUB_OUTPUT
 
       - name: Upload exe to NexusMods
         uses: Nexus-Mods/upload-action@v1.0.0-beta.5
@@ -75,7 +71,6 @@ jobs:
           filename: dist/CD_Companion.zip
           version: ${{ steps.meta.outputs.version }}
           display_name: CD_Companion ${{ steps.meta.outputs.version }}
-          description: ${{ steps.meta.outputs.notes }}
           file_category: main
           archive_existing_file: false
 
@@ -87,6 +82,5 @@ jobs:
           filename: dist/CD_Companion_source_${{ github.ref_name }}.zip
           version: ${{ steps.meta.outputs.version }}
           display_name: CD_Companion source ${{ steps.meta.outputs.version }}
-          description: ${{ steps.meta.outputs.notes }}
           file_category: miscellaneous
           archive_existing_file: true
