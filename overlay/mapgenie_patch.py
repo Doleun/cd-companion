@@ -7,6 +7,7 @@ and applies a tiny source patch before Chromium executes it.
 """
 
 import os
+import sys
 import urllib.parse
 import urllib.request
 
@@ -100,7 +101,8 @@ def _patch_map_js(data, source_url):
         return data, False
 
     patched = text.replace(PATCH_NEEDLE, PATCH_REPLACEMENT, 1)
-    print(f'[*] MapGenie map.js patch applied ({source_url})')
+    if not getattr(sys, 'frozen', False):
+        print(f'[*] MapGenie map.js patch applied ({source_url})')
     return patched.encode('utf-8'), True
 
 
