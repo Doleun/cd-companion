@@ -18,6 +18,7 @@ import ctypes
 import ctypes.wintypes
 import json
 import os
+import subprocess
 import sys
 import threading
 
@@ -54,7 +55,13 @@ WS_URL      = 'ws://localhost:7891'
 HOTKEY_ID   = 1
 MOD_CONTROL = 0x0002
 MOD_SHIFT   = 0x0004
+MOD_ALT     = 0x0001
 HOTKEY_VK   = ord('M')
+
+# Hotkey dev-only: Ctrl+Shift+Alt+R (restart overlay + server)
+if not getattr(sys, 'frozen', False):
+    RESTART_HOTKEY_ID = 2
+    RESTART_HOTKEY_VK = ord('R')
 
 # SETTING_DEFAULTS importado de overlay_config_defaults.py
 
@@ -248,6 +255,8 @@ class OverlayWindow(QMainWindow):
         # ── Hotkey ─────────────────────────────────────────────────────
         self._signals = HotkeySignals()
         self._signals.toggle.connect(self._toggle_visible)
+        if not getattr(sys, 'frozen', False):
+            self._signals.restart.connect(self._do_dev_restart)
         threading.Thread(target=self._hotkey_thread, daemon=True).start()
 
     # ── Rounded corners ────────────────────────────────────────────────
@@ -551,6 +560,21 @@ class OverlayWindow(QMainWindow):
             self.raise_()
             self.activateWindow()
 
+    def _do_dev_restart(self):
+        _PROJECT_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        self.close()
+        subprocess.Popen(
+            [sys.executable, '-m', 'overlay.main'],
+            cwd=_PROJECT_DIR,
+            creationflags=0x00000010,  # CREATE_NEW_CONSOLE
+        )
+        # Fecha o console antigo para evitar "Pressione qualquer tecla..."
+        kernel32 = ctypes.windll.kernel32
+        console = kernel32.GetConsoleWindow()
+        if console:
+            ctypes.windll.user32.PostMessageW(console, 0x0010, 0, 0)  # WM_CLOSE
+        os._exit(0)
+
     def _hotkey_thread(self):
         user32    = ctypes.windll.user32
         WM_HOTKEY = 0x0312
@@ -558,13 +582,23 @@ class OverlayWindow(QMainWindow):
             print("[!] Failed to register Ctrl+Shift+M hotkey")
             return
         print("[*] Hotkey registered: Ctrl+Shift+M  →  show/hide")
+        if not getattr(sys, 'frozen', False):
+            if user32.RegisterHotKey(None, RESTART_HOTKEY_ID, MOD_CONTROL | MOD_SHIFT | MOD_ALT, RESTART_HOTKEY_VK):
+                print("[*] Hotkey registered: Ctrl+Shift+Alt+R  →  restart (dev-only)")
+            else:
+                print("[!] Failed to register Ctrl+Shift+Alt+R hotkey (dev-only)")
         msg = ctypes.wintypes.MSG()
         while user32.GetMessageW(ctypes.byref(msg), None, 0, 0) != 0:
-            if msg.message == WM_HOTKEY and msg.wParam == HOTKEY_ID:
-                self._signals.toggle.emit()
+            if msg.message == WM_HOTKEY:
+                if msg.wParam == HOTKEY_ID:
+                    self._signals.toggle.emit()
+                elif not getattr(sys, 'frozen', False) and msg.wParam == RESTART_HOTKEY_ID:
+                    self._signals.restart.emit()
             user32.TranslateMessage(ctypes.byref(msg))
             user32.DispatchMessageW(ctypes.byref(msg))
         user32.UnregisterHotKey(None, HOTKEY_ID)
+        if not getattr(sys, 'frozen', False):
+            user32.UnregisterHotKey(None, RESTART_HOTKEY_ID)
 
     def closeEvent(self, event):
         cfg = load_config()
