@@ -29,11 +29,9 @@ from server.memory.engine import (
     _load_hook_offsets, _save_hook_offsets,
 )
 from shared.coord_math import (
-    DEFAULT_CALIBRATIONS,
     game_to_lnglat,
     lnglat_to_game,
     calibration_span as _calibration_span,
-    is_calibration_usable as _is_calibration_usable,
 )
 
 # Suprime erros de handshake inválido (ex: checagem TCP do launcher)
@@ -125,49 +123,12 @@ from server.hotkeys import (
     _nearby_controls_enabled,
 )
 
-CALIBRATION_FILES = {
-    "pywel": os.path.join(SAVE_DIR, "cd_calibration_pywel.json"),
-    "abyss": os.path.join(SAVE_DIR, "cd_calibration_abyss.json"),
-}
-_LEGACY_CALIBRATION_FILE = os.path.join(SAVE_DIR, "cd_calibration.json")
-
-# ── Calibração ───────────────────────────────────────────────────────
-
-def _load_calibration(realm="pywel"):
-    cal_file = CALIBRATION_FILES[realm]
-    try:
-        with open(cal_file, 'r') as f:
-            cal = json.load(f)
-            if _is_calibration_usable(cal, realm):
-                return cal
-    except Exception:
-        pass
-    if realm == "pywel" and os.path.isfile(_LEGACY_CALIBRATION_FILE):
-        try:
-            with open(_LEGACY_CALIBRATION_FILE, 'r') as f:
-                cal = json.load(f)
-                if _is_calibration_usable(cal, realm):
-                    return cal
-        except Exception:
-            pass
-    return list(DEFAULT_CALIBRATIONS[realm])
-
-
-# ── Waypoints ────────────────────────────────────────────────────────
-
-WAYPOINTS_FILE = os.path.join(SAVE_DIR, "cd_overlay_waypoints.json")
-
-def _load_waypoints():
-    try:
-        with open(WAYPOINTS_FILE, 'r', encoding='utf-8') as f:
-            return json.load(f)
-    except Exception:
-        return []
-
-def _save_waypoints(waypoints):
-    os.makedirs(SAVE_DIR, exist_ok=True)
-    with open(WAYPOINTS_FILE, 'w', encoding='utf-8') as f:
-        json.dump(waypoints, f, indent=2, ensure_ascii=False)
+# ── Calibracao + Waypoints ───────────────────────────────────────────────────
+from server.persistence import (
+    CALIBRATION_FILES,
+    _load_calibration, _save_calibration, _get_cal, _cal_cache,
+    WAYPOINTS_FILE, _load_waypoints, _save_waypoints,
+)
 
 # ── WebSocket server ─────────────────────────────────────────────────
 
@@ -178,17 +139,11 @@ _realtime_seq: int = 0
 _latest_realtime_lock = threading.Lock()
 _latest_realtime_frame = None
 _engine: TeleportEngine = None
-_cal_cache: dict = {}
 _last_pos: dict = None          # última posição conhecida
 _pre_teleport_pos: tuple = None # posição antes do último teleport (para abort)
 _default_teleport_y: float = 1000.0  # Y padrão quando marcador não tem altura (atualizado pelo cliente)
 ABYSS_DEFAULT_Y = 2400.0  # Y padrão para teleport no Abyss
 _waypoints: list = _load_waypoints()
-
-def _get_cal(realm):
-    if realm not in _cal_cache:
-        _cal_cache[realm] = _load_calibration(realm)
-    return _cal_cache[realm]
 
 def _effective_marker_y(marker_y: float) -> float:
     """Retorna o Y efetivo para teleport ao marcador do mapa.
@@ -283,12 +238,6 @@ async def _send_waypoints(websocket=None):
         await _safe_send(websocket, msg)
     else:
         await _broadcast_all(msg)
-
-def _save_calibration(realm: str, cal: list):
-    os.makedirs(SAVE_DIR, exist_ok=True)
-    with open(CALIBRATION_FILES[realm], 'w', encoding='utf-8') as f:
-        json.dump(cal, f, indent=2)
-    _cal_cache.pop(realm, None)
 
 async def _handle_client(websocket):
     global _waypoints, _pre_teleport_pos, _default_teleport_y
