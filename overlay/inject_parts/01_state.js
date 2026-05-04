@@ -8,6 +8,7 @@
   const NATIVE_REALTIME = !!window.__cdNativeRealtimeEnabled;
   const CENTER_TELEPORT_Y_KEY = 'cd_center_teleport_y';
   const NEARBY_RESPECT_MAP_VISIBILITY_KEY = 'cd_nearby_respect_map_visibility';
+  const NEARBY_STAY_IN_LIST_KEY = 'cd_nearby_stay_in_list';
   const CLIENT_ID = (window.crypto && typeof window.crypto.randomUUID === 'function')
     ? window.crypto.randomUUID()
     : `overlay-${Date.now()}-${Math.random().toString(16).slice(2)}`;

@@ -1,3 +1,8 @@
+## v0.06.03
+
+### Added
+- Nearby popup: "Stay in list" toggle that keeps focus in the current found/unfound list after marking a location, instead of following the item to the other list.
+
 ## v0.06.02
 
 ### Fixed
