@@ -19,13 +19,14 @@ from server.memory.hook_cache import _load_hook_offsets, _save_hook_offsets
 from server.memory.reader import ReaderMixin
 from server.memory.teleport import TeleportMixin
 from server.memory.shared_mem import SharedMemoryMixin
+from server.memory.mem_alloc import MemAllocMixin
 
 log = logging.getLogger('cd_server')
 
 
 # ── TeleportEngine (position reading only) ───────────────────────────
 
-class TeleportEngine(SharedMemoryMixin, ReaderMixin, TeleportMixin):
+class TeleportEngine(SharedMemoryMixin, MemAllocMixin, ReaderMixin, TeleportMixin):
     AOB_ENTITY = b'\x48\x83\xEC\x50\x48\x8B\xF9\x48\x8B\x91\x30\x11\x00\x00'
     AOB_POS    = b'\x0F\x11\x99\x90\x00\x00\x00'
     AOB_HEALTH = b'\x48\x8B\x46\x08\x48\x89\xF1'
@@ -461,42 +462,6 @@ class TeleportEngine(SharedMemoryMixin, ReaderMixin, TeleportMixin):
             "world_offset_rva": self.world_offset_addr - base if self.world_offset_addr else None,
         }.items() if v is not None}
         _save_hook_offsets(save_data)
-
-    def _alloc_near(self, handle, near, size):
-        for offset in range(0x10000, 0x7FFF0000, 0x10000):
-            for addr in [near + offset, near - offset]:
-                if addr <= 0:
-                    continue
-                result = k32.VirtualAllocEx(
-                    handle, addr, size, MEM_COMMIT | MEM_RESERVE, PAGE_EXECUTE_READWRITE)
-                if result:
-                    return result
-        return 0
-
-    def _alloc_block(self):
-        handle = self.pm.process_handle
-        for anchor in [self.hook_a, self.hook_b, self.hook_c, self.hook_d, self.hook_e, self.hook_cam]:
-            if not anchor:
-                continue
-            result = self._alloc_near(handle, anchor, self.BLOCK_SZ)
-            if result:
-                self.block = result
-                self.td  = result + self.OFF_TD
-                self.inv = result + self.OFF_INV
-                self.md  = result + self.OFF_MD
-                self.tp  = result + self.OFF_TP
-                self._far_mode = False
-                return
-        result = k32.VirtualAllocEx(
-            handle, 0, self.BLOCK_SZ, MEM_COMMIT | MEM_RESERVE, PAGE_EXECUTE_READWRITE)
-        if not result:
-            raise RuntimeError("Could not allocate memory for code caves.")
-        self.block = result
-        self.td  = result + self.OFF_TD
-        self.inv = result + self.OFF_INV
-        self.md  = result + self.OFF_MD
-        self.tp  = result + self.OFF_TP
-        self._far_mode = True
 
     def _rel32(self, from_addr, to_addr):
         rel = to_addr - (from_addr + 5)
