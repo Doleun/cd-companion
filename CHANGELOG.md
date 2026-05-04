@@ -1,3 +1,8 @@
+## v0.06.02
+
+### Fixed
+- Closing the nearby popup while the overlay is hidden no longer exits the entire application.
+
 ## v0.06.01
 
 ### Added
