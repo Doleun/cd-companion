@@ -193,7 +193,7 @@ class SettingsDialog(QDialog):
         self.setWindowFlags(self.windowFlags() | Qt.WindowStaysOnTopHint)
         self.setStyleSheet(SETTINGS_STYLE)
         self.setMinimumWidth(840)
-        self.resize(840, 495)
+        self.resize(840, 615)
         self._cfg = cfg
         self._original_opacity = parent.windowOpacity() if parent else 1.0
 
@@ -478,6 +478,81 @@ class SettingsDialog(QDialog):
         hk_note = QLabel('Restart required to apply hotkey change.')
         hk_note.setStyleSheet('color:#64748b; font:11px "Segoe UI"; margin-top:-4px;')
         active_layout[0].addWidget(hk_note)
+
+        # Nearby controller combo
+        if _HAS_CONTROLLER_HOTKEYS:
+            section('Controller', nb_layout)
+            active_layout[0].addWidget(QLabel('Open combo'))
+            nb_ctrl_row = QWidget()
+            nb_ctrl_row_layout = QHBoxLayout(nb_ctrl_row)
+            nb_ctrl_row_layout.setContentsMargins(0, 0, 0, 0)
+            nb_ctrl_row_layout.setSpacing(6)
+            _nb_ctrl_settings = _load_controller_hotkey_settings()
+            _nb_ctrl_mask = _nb_ctrl_settings.get("open_nearby", 0x0102)
+            self._nb_ctrl_display = QLineEdit(mask_to_name(_nb_ctrl_mask))
+            self._nb_ctrl_display.setReadOnly(True)
+            self._nb_ctrl_display.setFixedHeight(32)
+            self._nb_ctrl_display.setStyleSheet(
+                "QLineEdit{background:#e2e8f0;color:#111827;border:1px solid #64748b;"
+                "border-radius:6px;padding:4px 8px;}")
+            self._nb_ctrl_record_btn = QPushButton('Record')
+            self._nb_ctrl_record_btn.setFixedHeight(32)
+            self._nb_ctrl_record_btn.setStyleSheet(
+                "QPushButton{background:rgba(255,208,96,.18);"
+                "border:1px solid rgba(255,208,96,.5);"
+                "color:#ffd060;border-radius:6px;padding:0 10px;}"
+                "QPushButton:hover{background:rgba(255,208,96,.3);}"
+                "QPushButton:disabled{color:#666;border-color:#444;background:#222;}")
+            nb_ctrl_row_layout.addWidget(self._nb_ctrl_display)
+            nb_ctrl_row_layout.addWidget(self._nb_ctrl_record_btn)
+            active_layout[0].addWidget(nb_ctrl_row)
+            nb_ctrl_note = QLabel(
+                'Hold button combo on controller, then release. Restart required.')
+            nb_ctrl_note.setWordWrap(True)
+            nb_ctrl_note.setStyleSheet(
+                'color:#64748b; font:11px "Segoe UI"; margin-top:-4px;')
+            active_layout[0].addWidget(nb_ctrl_note)
+
+            self._nb_ctrl_recording = False
+            self._nb_ctrl_peak_mask = 0
+            self._nb_ctrl_timer = QTimer()
+            self._nb_ctrl_timer.setInterval(50)
+            _nb_get_xinput = _load_xinput_get_state()
+
+            def _nb_ctrl_poll():
+                btns = _controller_buttons(_nb_get_xinput)
+                self._nb_ctrl_peak_mask |= btns
+                if self._nb_ctrl_peak_mask and btns == 0:
+                    saved_mask = self._nb_ctrl_peak_mask
+                    self._nb_ctrl_timer.stop()
+                    self._nb_ctrl_recording = False
+                    self._nb_ctrl_record_btn.setText('Record')
+                    self._nb_ctrl_record_btn.setEnabled(True)
+                    self._nb_ctrl_display.setText(mask_to_name(saved_mask))
+                    if _set_controller_hotkey_paused:
+                        _set_controller_hotkey_paused(False)
+                    try:
+                        existing = _load_controller_hotkey_settings()
+                        existing["open_nearby"] = saved_mask
+                        _save_controller_hotkey_settings(existing)
+                    except Exception:
+                        pass
+
+            self._nb_ctrl_timer.timeout.connect(_nb_ctrl_poll)
+
+            def _nb_start_record():
+                if self._nb_ctrl_recording:
+                    return
+                self._nb_ctrl_recording = True
+                self._nb_ctrl_peak_mask = 0
+                self._nb_ctrl_display.setFocus()
+                self._nb_ctrl_record_btn.setText('Recording...')
+                self._nb_ctrl_record_btn.setEnabled(False)
+                if _set_controller_hotkey_paused:
+                    _set_controller_hotkey_paused(True)
+                self._nb_ctrl_timer.start()
+
+            self._nb_ctrl_record_btn.clicked.connect(_nb_start_record)
 
         nb_layout.addStretch(1)
 
