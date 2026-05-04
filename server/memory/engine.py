@@ -6,30 +6,24 @@ Extraído de position_server.py para melhor organização.
 import ctypes
 import ctypes.wintypes
 import logging
-import os
 import struct
-import sys
 
 import pymem
 import pymem.process
-
-from shared.coord_math import (
-    player_heading as _calc_player_heading,
-    camera_heading as _calc_camera_heading,
-)
 
 from server.memory.constants import (
     PROCESS_NAME, SAVE_DIR, HOOK_OFFSETS_FILE, HEIGHT_BOOST,
     k32, MEM_COMMIT, MEM_RESERVE, MEM_RELEASE, PAGE_EXECUTE_READWRITE, _REDACT,
 )
 from server.memory.hook_cache import _load_hook_offsets, _save_hook_offsets
+from server.memory.reader import ReaderMixin
 
 log = logging.getLogger('cd_server')
 
 
 # ── TeleportEngine (position reading only) ───────────────────────────
 
-class TeleportEngine:
+class TeleportEngine(ReaderMixin):
     AOB_ENTITY = b'\x48\x83\xEC\x50\x48\x8B\xF9\x48\x8B\x91\x30\x11\x00\x00'
     AOB_POS    = b'\x0F\x11\x99\x90\x00\x00\x00'
     AOB_HEALTH = b'\x48\x8B\x46\x08\x48\x89\xF1'
@@ -911,86 +905,6 @@ class TeleportEngine:
         self.orig_bytes.clear()
         self.hooks_installed = False
 
-    def get_player_pos(self):
-        # Preferir leitura direta dos globais estáticos (não requer hook)
-        x_addr, y_addr, z_addr = self.xyz_addr
-        if x_addr:
-            try:
-                x = self.pm.read_float(x_addr)
-                y = self.pm.read_float(y_addr)
-                z = self.pm.read_float(z_addr)
-                if x == 0.0 and y == 0.0 and z == 0.0:
-                    return None
-                return x, y, z
-            except Exception:
-                pass
-        # Fallback: bloco td instalado pelo hook_a
-        if not self.td:
-            return None
-        try:
-            raw = self.pm.read_bytes(self.td + 0x20, 12)
-            x, y, z = struct.unpack('<fff', raw)
-            if x == 0.0 and y == 0.0 and z == 0.0:
-                return None
-            return x, y, z
-        except Exception:
-            return None
-
-    def get_world_offsets(self):
-        if not self.world_offset_addr:
-            return None
-        try:
-            raw = self.pm.read_bytes(self.world_offset_addr, 16)
-            return struct.unpack('<ffff', raw)
-        except Exception:
-            return None
-
-    def get_player_abs(self):
-        pos = self.get_player_pos()
-        if not pos:
-            return None
-        off = self.get_world_offsets()
-        if off:
-            return pos[0] + off[0], pos[1], pos[2] + off[2]
-        return pos
-
-    def get_entity_base(self):
-        if not self.td:
-            return 0
-        try:
-            return self.pm.read_ulonglong(self.td + 0x18)
-        except Exception:
-            return 0
-
-    def get_player_heading(self):
-        """Retorna heading em graus via forward vector (RBX+0x80/0x88 do hook_e).
-        RBX é salvo em tp+0x28 pela cave_e a cada frame do physics loop.
-        Retorna None se hook_e não instalado ou vetor zero."""
-        if not self.tp:
-            return None
-        try:
-            entity = self.pm.read_ulonglong(self.tp + 0x28)
-            if not entity:
-                return None
-            fx = self.pm.read_float(entity + 0x80)
-            fz = self.pm.read_float(entity + 0x88)
-            return _calc_player_heading(fx, fz)
-        except Exception:
-            return None
-
-    def get_camera_heading(self):
-        """Retorna (heading, raw) onde heading é o valor processado e raw é o float
-        lido diretamente da cave (antes de qualquer conversão).
-        Retorna (None, None) se hook não instalado ou valor ainda zerado."""
-        if not self.hook_cam or not self.block:
-            return None, None
-        try:
-            raw = self.pm.read_float(self.block + self.OFF_CAM_YAW)
-            heading = _calc_camera_heading(raw)
-            return heading, raw
-        except Exception:
-            return None, None
-
     def set_invuln(self, on: bool):
         if not self.teleport_enabled:
             return
@@ -999,19 +913,6 @@ class TeleportEngine:
                 self.pm.write_bytes(self.inv, b'\x01' if on else b'\x00', 1)
             except Exception:
                 pass
-
-    def get_map_dest(self):
-        """Retorna (x, y, z) do marcador de destino do mapa in-game, ou None."""
-        if not self.md:
-            return None
-        try:
-            raw = self.pm.read_bytes(self.md, 16)
-            x, y, z, flag = struct.unpack('<fffI', raw)
-            if flag != 1:
-                return None
-            return x, y, z
-        except Exception:
-            return None
 
     def teleport_to_abs(self, abs_x, abs_y, abs_z):
         if not self.teleport_enabled:
