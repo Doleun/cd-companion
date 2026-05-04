@@ -130,14 +130,13 @@ from server.persistence import (
     WAYPOINTS_FILE, _load_waypoints, _save_waypoints,
 )
 
-# ── WebSocket server ─────────────────────────────────────────────────
+# ── WebSocket transport ───────────────────────────────────────────────────────
+from server.ws_transport import (
+    _clients, _client_locks, _client_options,
+    _safe_send, _safe_send_many, _broadcast_all, _client_label,
+    _broadcast_realtime, get_latest_realtime_frame,
+)
 
-_clients: set = set()
-_client_locks: dict = {}    # websocket → asyncio.Lock (serializa sends)
-_client_options: dict = {}  # websocket -> opcoes negociadas pelo cliente
-_realtime_seq: int = 0
-_latest_realtime_lock = threading.Lock()
-_latest_realtime_frame = None
 _engine: TeleportEngine = None
 _last_pos: dict = None          # última posição conhecida
 _pre_teleport_pos: tuple = None # posição antes do último teleport (para abort)
@@ -154,82 +153,6 @@ def _effective_marker_y(marker_y: float) -> float:
             return ABYSS_DEFAULT_Y
         return _default_teleport_y
     return marker_y
-
-async def _safe_send(websocket, msg: str):
-    """Send com lock para evitar conflito de sends concorrentes."""
-    lock = _client_locks.get(websocket)
-    if not lock:
-        return
-    async with lock:
-        try:
-            await websocket.send(msg)
-        except Exception:
-            _clients.discard(websocket)
-
-async def _safe_send_many(websocket, messages):
-    """Envia varias mensagens para um cliente sob um unico lock."""
-    lock = _client_locks.get(websocket)
-    if not lock:
-        return
-    async with lock:
-        try:
-            for msg in messages:
-                await websocket.send(msg)
-        except Exception:
-            _clients.discard(websocket)
-
-async def _broadcast_all(msg: str):
-    await asyncio.gather(
-        *(_safe_send(client, msg) for client in set(_clients)),
-        return_exceptions=True,
-    )
-
-def _client_label(client):
-    opts = _client_options.get(client, {})
-    name = opts.get("client_name") or "client"
-    remote = getattr(client, "remote_address", None)
-    return f"{name}@{remote}" if remote else name
-
-def _make_realtime_frame(events: list):
-    global _realtime_seq
-    _realtime_seq += 1
-    sent_at = round(time.time() * 1000.0, 3)
-    return {
-        "type": "realtime",
-        "seq": _realtime_seq,
-        "sentAt": sent_at,
-        "events": events,
-    }
-
-def _publish_latest_realtime(events: list):
-    global _latest_realtime_frame
-    frame = _make_realtime_frame(events)
-    with _latest_realtime_lock:
-        _latest_realtime_frame = frame
-    return frame
-
-def get_latest_realtime_frame():
-    with _latest_realtime_lock:
-        return _latest_realtime_frame
-
-async def _broadcast_realtime(events: list):
-    """Envia eventos frequentes. Clientes opt-in recebem 1 frame WebSocket por tick."""
-    if not events:
-        return
-    frame = _publish_latest_realtime(events)
-    bundled_msg = json.dumps(frame)
-    individual_msgs = [json.dumps(event) for event in events]
-    tasks = []
-    for client in set(_clients):
-        opts = _client_options.get(client, {})
-        if opts.get("native_realtime"):
-            continue
-        if opts.get("realtime_bundle"):
-            tasks.append(_safe_send(client, bundled_msg))
-        else:
-            tasks.append(_safe_send_many(client, individual_msgs))
-    if tasks:
-        await asyncio.gather(*tasks, return_exceptions=True)
 
 async def _send_waypoints(websocket=None):
     """Envia lista de waypoints. Se websocket=None, broadcast para todos."""
