@@ -1,4 +1,4 @@
-## v0.06.03
+## v0.07.00
 
 ### Added
 - Waypoints panel: open/close via keyboard hotkey (default Shift+Y) and configurable controller combo (default DPad Down+A).
