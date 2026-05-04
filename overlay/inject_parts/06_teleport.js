@@ -1,4 +1,3 @@
-
   function createCenterCrosshair() {
     if (document.getElementById('cdCenterCrosshair')) return;
     const el = document.createElement('div');

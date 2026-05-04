@@ -310,3 +310,4 @@
     renderWaypointList(getWaypointPopupDoc()?.getElementById('cdWpPopupList'));
   }
 
+  // ── Layout adaptativo para janela circular ────────────────────────

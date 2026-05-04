@@ -1,4 +1,3 @@
-
   function updateHeading(newPos) {
     const src = (window.__cdSettings && window.__cdSettings.headingSource) || 'auto';
     let deg = null;
@@ -98,3 +97,4 @@
       liveEaseTo(mm, view);
     }
   }
+

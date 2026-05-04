@@ -60,3 +60,4 @@
     } catch (_) {}
   }
   window.__cdUpdateMapIconSize = adjustIconSize;
+

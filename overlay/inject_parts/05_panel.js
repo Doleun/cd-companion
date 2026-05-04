@@ -1,4 +1,3 @@
-
   // ── Botão flutuante status (direita) — toggle follow + expandir ───
   function toggleFollow() {
     following = !following;
@@ -147,3 +146,4 @@
       pan(lng, lat);
     }
   }
+

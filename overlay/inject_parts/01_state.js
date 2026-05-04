@@ -36,3 +36,4 @@
   let teleportEnabled = !(window.__cdSettings && window.__cdSettings.teleportEnabled === false);
   document.addEventListener('keydown', (e) => { if (e.key === 'Shift') shiftHeld = true;  });
   document.addEventListener('keyup',   (e) => { if (e.key === 'Shift') shiftHeld = false; });
+

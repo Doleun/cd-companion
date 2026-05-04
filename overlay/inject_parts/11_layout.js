@@ -1,4 +1,3 @@
-  // ── Layout adaptativo para janela circular ────────────────────────
   function applyRoundLayout(isRound) {
     ensureStatusToggleBtn();
     ensureWpToggleBtn();
@@ -244,3 +243,4 @@
     }
   }
   window.__cdUpdateTeleportVisibility = updateTeleportVisibility;
+

@@ -142,7 +142,7 @@ def _load_inject_js():
         for p in _INJECT_PARTS:
             with open(os.path.join(parts_dir, p), encoding='utf-8') as f:
                 parts.append(f.read())
-        raw = '\n'.join(parts)
+        raw = ''.join(parts)
     else:
         with open(os.path.join(_dir, 'inject.js'), encoding='utf-8') as f:
             raw = f.read()

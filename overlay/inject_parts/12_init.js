@@ -1,4 +1,3 @@
-
   createCenterCrosshair();
   ensureStatusToggleBtn();
   updatePanel();

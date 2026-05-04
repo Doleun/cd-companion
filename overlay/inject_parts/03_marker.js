@@ -1,4 +1,3 @@
-
   function getMap() {
     if (map) return map;
     if (window.map && typeof window.map.easeTo === 'function') {
@@ -157,3 +156,4 @@
     marker = new mapboxgl.Marker({ element: el, anchor: 'center' })
       .setLngLat([0, 0]).addTo(map);
   }
+
