@@ -154,7 +154,15 @@ INJECT_JS = _load_inject_js()
 from overlay.widgets import (
     SettingsDialog, InterceptPage, LoginPrompt,
     HotkeySignals, TitleBar,
+    focus_game_window,
 )
+
+try:
+    from server.main import (
+        set_waypoints_focus_callbacks as _set_waypoints_focus_callbacks,
+    )
+except Exception:
+    _set_waypoints_focus_callbacks = None
 
 # ── Janela principal ──────────────────────────────────────────────────
 
@@ -283,6 +291,12 @@ class OverlayWindow(QMainWindow):
         if not getattr(sys, 'frozen', False):
             self._signals.restart.connect(self._do_dev_restart)
         threading.Thread(target=self._hotkey_thread, daemon=True).start()
+
+        if _set_waypoints_focus_callbacks:
+            _set_waypoints_focus_callbacks(
+                self._activate_for_waypoints,
+                focus_game_window,
+            )
 
     # ── Rounded corners ────────────────────────────────────────────────
     CORNER_RADIUS = 8
@@ -612,6 +626,25 @@ class OverlayWindow(QMainWindow):
             self.raise_()
             self.activateWindow()
 
+    def _activate_for_waypoints(self):
+        """Traz o overlay para frente quando o painel de waypoints abre."""
+        hwnd = int(self.winId())
+        user32 = ctypes.windll.user32
+        user32.GetForegroundWindow.restype = ctypes.wintypes.HWND
+        user32.GetWindowThreadProcessId.argtypes = [ctypes.wintypes.HWND, ctypes.POINTER(ctypes.wintypes.DWORD)]
+        user32.GetWindowThreadProcessId.restype = ctypes.wintypes.DWORD
+        user32.AttachThreadInput.argtypes = [ctypes.wintypes.DWORD, ctypes.wintypes.DWORD, ctypes.wintypes.BOOL]
+        user32.SetForegroundWindow.argtypes = [ctypes.wintypes.HWND]
+        fg_hwnd = user32.GetForegroundWindow()
+        fg_tid = user32.GetWindowThreadProcessId(fg_hwnd, None)
+        my_tid = ctypes.windll.kernel32.GetCurrentThreadId()
+        if fg_tid and fg_tid != my_tid:
+            user32.AttachThreadInput(fg_tid, my_tid, True)
+            user32.SetForegroundWindow(hwnd)
+            user32.AttachThreadInput(fg_tid, my_tid, False)
+        else:
+            user32.SetForegroundWindow(hwnd)
+
     def _do_dev_restart(self):
         _PROJECT_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
         self.close()
@@ -655,13 +688,15 @@ class OverlayWindow(QMainWindow):
     def closeEvent(self, event):
         cfg = load_config()
         w = self.width()
+        current_url = self._view.url().toString()
         cfg.update({
             'width':  w,
             'height': w if self._round_window else self.height(),
             'x':      self.x(),
             'y':      self.y(),
-            'url':    self._view.url().toString(),
         })
+        if current_url and current_url not in ('about:blank', 'about:blank#blocked', ''):
+            cfg['url'] = current_url
         save_config(cfg)
         print("[*] Config saved")
         super().closeEvent(event)

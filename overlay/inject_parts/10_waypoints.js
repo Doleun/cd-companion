@@ -1,4 +1,7 @@
   // ── Botão flutuante para abrir/fechar waypoints ───────────────────
+  let _wpNavIndex = -1;       // indice selecionado na lista; -1 = nenhum
+  let _wpPendingFocusLast = false;  // apos save bem-sucedido, focar ultimo item
+
   function ensureWpToggleBtn() {
     if (document.getElementById('cdWpToggle')) return;
     const btn = document.createElement('button');
@@ -103,6 +106,130 @@
     return null;
   }
 
+  function _triggerWpSave(doc) {
+    // Usar o prompt do contexto do popup para que o foco volte para ele automaticamente
+    const promptFn = (doc && doc.defaultView && doc.defaultView.prompt)
+      ? doc.defaultView.prompt.bind(doc.defaultView)
+      : prompt;
+    const name = promptFn('Nome do waypoint:', lastPos
+      ? `${lastPos.realm === 'abyss' ? '[Abyss] ' : ''}${Math.round(lastPos.x)}, ${Math.round(lastPos.z)}`
+      : 'Waypoint');
+    if (name !== null) {
+      _wpPendingFocusLast = true;
+      sendCmd({ cmd: 'save_waypoint', name });
+    } else {
+      // cancelou — foca a lista dentro do popup
+      if (doc) {
+        const list = doc.getElementById('cdWpPopupList');
+        if (list) {
+          list.setAttribute('tabindex', '-1');
+          list.focus();
+        }
+      }
+    }
+  }
+
+  function _wpFocusSaveBtn(doc) {
+    const btn = doc.getElementById('cdWpPopupSave');
+    if (!btn) return;
+    btn.style.borderColor = 'rgba(255,208,96,.9)';
+    btn.style.boxShadow   = '0 0 0 2px rgba(255,208,96,.35)';
+    btn.focus();
+    btn.addEventListener('blur', () => {
+      btn.style.borderColor = '';
+      btn.style.boxShadow   = '';
+    }, { once: true });
+  }
+
+  function _wpClearSaveBtnFocus(doc) {
+    const btn = doc.getElementById('cdWpPopupSave');
+    if (!btn) return;
+    btn.style.borderColor = '';
+    btn.style.boxShadow   = '';
+  }
+
+  function _bindWaypointKeyboard(doc) {
+    const getList = () => doc.getElementById('cdWpPopupList');
+    const getSave = () => doc.getElementById('cdWpPopupSave');
+    const getFilter = () => doc.getElementById('cdWpPopupFilter');
+
+    doc.addEventListener('keydown', (e) => {
+      const filterFocused = doc.activeElement === getFilter();
+      const saveFocused   = doc.activeElement === getSave();
+
+      if (e.ctrlKey && e.key === 'n') {
+        e.preventDefault();
+        _triggerWpSave(doc);
+        return;
+      }
+      if (e.ctrlKey && e.key === 'f') {
+        e.preventDefault();
+        getFilter()?.focus();
+        return;
+      }
+
+      if (filterFocused) {
+        const list = getList();
+        const rows = list ? list.querySelectorAll('[data-tp]') : [];
+        if (e.key === 'ArrowDown') {
+          e.preventDefault();
+          if (rows.length > 0) {
+            getFilter().blur();
+            _wpNavIndex = 0;
+            _wpApplyHighlight(list);
+          }
+        } else if (e.key === 'ArrowUp') {
+          e.preventDefault();
+          getFilter().blur();
+          _wpFocusSaveBtn(doc);
+        }
+        return;
+      }
+
+      if (saveFocused) {
+        if (e.key === 'Enter' || e.key === ' ') {
+          e.preventDefault();
+          _triggerWpSave(doc);
+        } else if (e.key === 'ArrowDown') {
+          e.preventDefault();
+          _wpClearSaveBtnFocus(doc);
+          getSave().blur();
+          _wpNavIndex = -1;
+        } else if (e.key === 'Escape') {
+          _wpClearSaveBtnFocus(doc);
+          getSave().blur();
+        }
+        return;
+      }
+
+      const list = getList();
+      const rows = list ? list.querySelectorAll('[data-tp]') : [];
+      const count = rows.length;
+
+      if (e.key === 'ArrowUp') {
+        e.preventDefault();
+        if (_wpNavIndex <= 0) {
+          _wpNavIndex = -1;
+          _wpApplyHighlight(list);
+          _wpFocusSaveBtn(doc);
+        } else {
+          _wpNavIndex--;
+          _wpApplyHighlight(list);
+        }
+      } else if (e.key === 'ArrowDown') {
+        e.preventDefault();
+        _wpNavIndex = count === 0 ? -1 : (_wpNavIndex >= count - 1 ? count - 1 : _wpNavIndex + 1);
+        _wpApplyHighlight(list);
+      } else if ((e.key === 'Enter' || e.key === ' ') && _wpNavIndex >= 0 && _wpNavIndex < count) {
+        e.preventDefault();
+        rows[_wpNavIndex].click();
+      } else if (e.key === 'Delete' && _wpNavIndex >= 0 && _wpNavIndex < count) {
+        e.preventDefault();
+        rows[_wpNavIndex].closest('div')?.querySelector('[data-del]')?.click();
+      }
+    });
+  }
+
   function bindWaypointPopupControls(doc) {
     const save = doc.getElementById('cdWpPopupSave');
     const filter = doc.getElementById('cdWpPopupFilter');
@@ -110,12 +237,8 @@
       filter.value = waypointFilter;
       filter.addEventListener('input', () => setWaypointFilter(filter.value));
     }
-    if (save) save.addEventListener('click', () => {
-      const name = prompt('Nome do waypoint:', lastPos
-        ? `${lastPos.realm === 'abyss' ? '[Abyss] ' : ''}${Math.round(lastPos.x)}, ${Math.round(lastPos.z)}`
-        : 'Waypoint');
-      if (name !== null) sendCmd({ cmd: 'save_waypoint', name });
-    });
+    if (save) save.addEventListener('click', () => _triggerWpSave(doc));
+    _bindWaypointKeyboard(doc);
   }
 
   function ensureWaypointPopup() {
@@ -165,6 +288,7 @@
               color:#e8e8e8;padding:5px 8px;outline:none;
             }
             .filter:focus{border-color:rgba(255,208,96,.45)}
+            .btn:focus{outline:none}
             .btn{
               border-radius:4px;cursor:pointer;padding:3px 8px;
               background:rgba(255,208,96,.13);
@@ -257,6 +381,16 @@
     return text.includes(waypointFilter);
   }
 
+  function _wpApplyHighlight(list) {
+    if (!list) return;
+    const rows = list.querySelectorAll('[data-tp]');
+    rows.forEach((btn, i) => {
+      const row = btn.closest('div');
+      if (row) row.style.background = i === _wpNavIndex
+        ? 'rgba(255,208,96,.18)' : 'rgba(255,255,255,.04)';
+    });
+  }
+
   function renderWaypointList(list) {
     if (!list) return;
     if (waypoints.length === 0) {
@@ -302,12 +436,70 @@
         sendCmd({ cmd: 'delete_waypoint', index: +btn.dataset.del });
       });
     });
+    if (_wpPendingFocusLast && list.id === 'cdWpPopupList') {
+      _wpNavIndex = items.length - 1;
+      _wpPendingFocusLast = false;
+    } else if (_wpNavIndex >= items.length) {
+      _wpNavIndex = items.length - 1;
+    }
+    _wpApplyHighlight(list);
   }
 
   function renderWaypoints() {
     ensureWaypointPanel();
     renderWaypointList(document.getElementById('cdWpList'));
     renderWaypointList(getWaypointPopupDoc()?.getElementById('cdWpPopupList'));
+  }
+
+  function waypointNavInput(action) {
+    const doc = getWaypointPopupDoc();
+    if (!doc) return;
+    const list = doc.getElementById('cdWpPopupList');
+    if (!list) return;
+    const rows = list.querySelectorAll('[data-tp]');
+    const count = rows.length;
+    if (action === 'up') {
+      const filterFocused = doc.activeElement === doc.getElementById('cdWpPopupFilter');
+      if (filterFocused || _wpNavIndex === 0) {
+        doc.activeElement?.blur();
+        _wpNavIndex = -1;
+        _wpApplyHighlight(list);
+        _wpFocusSaveBtn(doc);
+      } else {
+        _wpNavIndex = count === 0 ? -1 : (_wpNavIndex < 0 ? count - 1 : _wpNavIndex - 1);
+        _wpApplyHighlight(list);
+      }
+    } else if (action === 'down') {
+      _wpClearSaveBtnFocus(doc);
+      _wpNavIndex = count === 0 ? -1 : (_wpNavIndex >= count - 1 ? 0 : _wpNavIndex + 1);
+      _wpApplyHighlight(list);
+    } else if (action === 'select') {
+      if (doc.activeElement === doc.getElementById('cdWpPopupSave')) {
+        _triggerWpSave(doc);
+      } else if (_wpNavIndex >= 0 && _wpNavIndex < count) {
+        rows[_wpNavIndex].click();
+      }
+    } else if (action === 'close') {
+      try { if (waypointPopup && !waypointPopup.closed) waypointPopup.close(); } catch (_) {}
+      waypointPopup = null;
+      _wpNavIndex = -1;
+      sendCmd({ cmd: 'waypoints_state', open: false });
+    }
+  }
+
+  function toggleWaypointPanelFromHotkey() {
+    try {
+      if (waypointPopup && !waypointPopup.closed) {
+        waypointPopup.close();
+        waypointPopup = null;
+        _wpNavIndex = -1;
+        sendCmd({ cmd: 'waypoints_state', open: false });
+        return;
+      }
+    } catch (_) { waypointPopup = null; }
+    if (ensureWaypointPopup()) {
+      sendCmd({ cmd: 'waypoints_state', open: true });
+    }
   }
 
   // ── Layout adaptativo para janela circular ────────────────────────
