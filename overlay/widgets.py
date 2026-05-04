@@ -647,6 +647,19 @@ class SettingsDialog(QDialog):
         active_layout[0].addWidget(QLabel('Source'))
         self._heading_combo = QComboBox()
         self._heading_combo.setFixedHeight(32)
+        self._heading_combo.setStyleSheet(
+            "QComboBox{background:#e2e8f0;color:#111827;border:1px solid #64748b;"
+            "border-radius:6px;padding:4px 30px 4px 8px;}"
+            "QComboBox:focus{border:1px solid #ffd060;}"
+            "QComboBox::drop-down{subcontrol-origin:padding;subcontrol-position:top right;"
+            "width:24px;border-left:1px solid #94a3b8;background:#cbd5e1;"
+            "border-top-right-radius:6px;border-bottom-right-radius:6px;}"
+            "QComboBox::down-arrow{image:none;width:0;height:0;"
+            "border-left:4px solid transparent;border-right:4px solid transparent;"
+            "border-top:5px solid #1f2937;}"
+            "QComboBox QAbstractItemView{background:#f8fafc;color:#111827;"
+            "selection-background-color:#ffd060;selection-color:#111827;"
+            "border:1px solid #475569;}")
         self._heading_combo.addItem('Auto (entity \u2192 delta)', 'auto')
         self._heading_combo.addItem('Forward vector (entity)', 'entity')
         self._heading_combo.addItem('Position delta', 'delta')
@@ -676,6 +689,19 @@ class SettingsDialog(QDialog):
         active_layout[0].addWidget(QLabel('Realtime transport'))
         self._realtime_transport_combo = QComboBox()
         self._realtime_transport_combo.setFixedHeight(32)
+        self._realtime_transport_combo.setStyleSheet(
+            "QComboBox{background:#e2e8f0;color:#111827;border:1px solid #64748b;"
+            "border-radius:6px;padding:4px 30px 4px 8px;}"
+            "QComboBox:focus{border:1px solid #ffd060;}"
+            "QComboBox::drop-down{subcontrol-origin:padding;subcontrol-position:top right;"
+            "width:24px;border-left:1px solid #94a3b8;background:#cbd5e1;"
+            "border-top-right-radius:6px;border-bottom-right-radius:6px;}"
+            "QComboBox::down-arrow{image:none;width:0;height:0;"
+            "border-left:4px solid transparent;border-right:4px solid transparent;"
+            "border-top:5px solid #1f2937;}"
+            "QComboBox QAbstractItemView{background:#f8fafc;color:#111827;"
+            "selection-background-color:#ffd060;selection-color:#111827;"
+            "border:1px solid #475569;}")
         self._realtime_transport_combo.addItem('WebSocket', 'websocket')
         self._realtime_transport_combo.addItem('Native bridge (experimental)', 'native')
         current_transport = cfg.get(
