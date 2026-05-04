@@ -479,6 +479,10 @@
       } else if (_wpNavIndex >= 0 && _wpNavIndex < count) {
         rows[_wpNavIndex].click();
       }
+    } else if (action === 'delete') {
+      if (_wpNavIndex >= 0 && _wpNavIndex < count) {
+        rows[_wpNavIndex].closest('div')?.querySelector('[data-del]')?.click();
+      }
     } else if (action === 'close') {
       try { if (waypointPopup && !waypointPopup.closed) waypointPopup.close(); } catch (_) {}
       waypointPopup = null;
