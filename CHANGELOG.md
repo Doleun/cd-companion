@@ -1,3 +1,14 @@
+## v0.06.04
+
+### Added
+- Waypoints panel: open/close via keyboard hotkey (default Shift+Y) and configurable controller combo (default DPad Down+A).
+- Waypoints panel: controller navigation with D-pad Up/Down, A to teleport, Y to delete, B to close.
+- Settings dialog reorganized into tabbed layout (Map, Window, Teleport, Nearby, Waypoints, Direction, Performance).
+
+### Fixed
+- Closing the waypoints popup with controller B no longer triggers the B action in Crimson Desert (delayed focus return to game window).
+- Keyboard navigation improvements in the waypoints popup.
+
 ## v0.06.03
 
 ### Added
