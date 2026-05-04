@@ -108,6 +108,12 @@
         } else if (msg.type === 'nearby_input') {
           if (nearbyControlsEnabled() && nearbyInputHandler) nearbyInputHandler(msg.action);
 
+        } else if (msg.type === 'open_waypoints') {
+          toggleWaypointPanelFromHotkey();
+
+        } else if (msg.type === 'waypoint_input_wp') {
+          waypointNavInput(msg.action);
+
         } else if (msg.type === 'pan_location') {
           panToLocationId(msg.locationId);
 

@@ -117,9 +117,11 @@ from server.hotkeys import (
     XINPUT_GAMEPAD_BACK, XINPUT_GAMEPAD_LEFT_SHOULDER,
     XINPUT_GAMEPAD_A, XINPUT_GAMEPAD_B,
     XINPUT_OPEN_NEARBY_MASK, XINPUT_NEARBY_INPUTS,
+    XINPUT_WAYPOINT_INPUTS,
     XINPUT_GAMEPAD, XINPUT_STATE,
     _load_xinput_get_state, _controller_buttons,
     _load_hotkey_settings, _save_hotkey_settings,
+    _load_controller_hotkey_settings,
     _nearby_controls_enabled,
 )
 
@@ -301,6 +303,11 @@ async def _handle_client(websocket):
                     _save_waypoints(_waypoints)
                     await _send_waypoints()
 
+            elif action == "waypoints_state":
+                set_waypoints_panel_open(bool(cmd.get("open", False)))
+                if cmd.get("open") and _waypoints_open_cb:
+                    _waypoints_open_cb()
+
             elif action == "add_calibration":
                 lng = cmd.get("lng")
                 lat = cmd.get("lat")
@@ -383,11 +390,40 @@ async def _broadcast_status(status: str):
 
 _hotkey_loop = None  # referência ao asyncio loop para schedule de ações
 _nearby_hotkey_paused = False  # True enquanto usuário edita o atalho nas Settings
+_controller_hotkey_paused = False  # True enquanto usuário grava combo de controle nas Settings
 _nearby_popup_hwnd = None
+_waypoints_panel_open = False
+_waypoints_open_cb  = None
+_waypoints_close_cb = None
+
+def set_waypoints_focus_callbacks(on_open, on_close):
+    global _waypoints_open_cb, _waypoints_close_cb
+    _waypoints_open_cb  = on_open
+    _waypoints_close_cb = on_close
+
+def set_waypoints_panel_open(open_: bool):
+    global _waypoints_panel_open
+    _waypoints_panel_open = open_
+    if not open_ and _waypoints_close_cb:
+        # Delay para que o botão B do controller seja solto antes de devolver
+        # foco ao jogo — evita que o jogo processe o B residual.
+        loop = _hotkey_loop
+        if loop:
+            def _delayed_focus():
+                # Só devolve foco se o painel continua fechado
+                if not _waypoints_panel_open:
+                    _waypoints_close_cb()
+            loop.call_later(0.2, _delayed_focus)
+        else:
+            _waypoints_close_cb()
 
 def set_nearby_hotkey_paused(paused: bool):
     global _nearby_hotkey_paused
     _nearby_hotkey_paused = paused
+
+def set_controller_hotkey_paused(paused: bool):
+    global _controller_hotkey_paused
+    _controller_hotkey_paused = paused
 
 def set_nearby_popup_hwnd(hwnd):
     """Registra a janela do nearby popup para filtrar inputs globais do controle."""
@@ -409,15 +445,54 @@ def _nearby_popup_is_foreground():
     except Exception:
         return False
 
+_waypoints_popup_hwnd = None
+
+def set_waypoints_popup_hwnd(hwnd):
+    global _waypoints_popup_hwnd
+    _waypoints_popup_hwnd = int(hwnd) if hwnd else None
+
+def _waypoints_popup_is_foreground():
+    hwnd = _waypoints_popup_hwnd
+    if not hwnd:
+        return False
+    try:
+        user32 = ctypes.windll.user32
+        user32.GetForegroundWindow.restype = ctypes.wintypes.HWND
+        user32.GetAncestor.argtypes = [ctypes.wintypes.HWND, ctypes.wintypes.UINT]
+        user32.GetAncestor.restype = ctypes.wintypes.HWND
+        fg_hwnd = user32.GetForegroundWindow()
+        root_hwnd = user32.GetAncestor(fg_hwnd, 2)
+        return int(fg_hwnd) == hwnd or int(root_hwnd) == hwnd
+    except Exception:
+        return False
+
+def _send_key(vk):
+    user32 = ctypes.windll.user32
+    user32.keybd_event.argtypes = [
+        ctypes.wintypes.BYTE, ctypes.wintypes.BYTE,
+        ctypes.wintypes.DWORD, ctypes.POINTER(ctypes.wintypes.ULONG),
+    ]
+    user32.keybd_event(vk, 0, 0, None)
+    user32.keybd_event(vk, 0, 0x0002, None)
+
+def _send_key_return():
+    _send_key(0x0D)  # VK_RETURN
+
+def _send_key_escape():
+    _send_key(0x1B)  # VK_ESCAPE
+
 def _hotkey_thread():
     """Thread que faz polling de hotkeys globais via GetAsyncKeyState."""
     import threading
     get_key = ctypes.windll.user32.GetAsyncKeyState
     get_xinput_state = _load_xinput_get_state()
     hotkeys = _load_hotkey_settings()
+    controller_hotkeys = _load_controller_hotkey_settings()
     key_state = {}
     controller_open_nearby_pressed = False
     controller_button_state = {}
+    controller_open_waypoints_pressed = False
+    controller_wp_button_state = {}
 
     def _display(hk):
         vk = hk["vk"]
@@ -441,8 +516,8 @@ def _hotkey_thread():
             continue
 
         nearby_enabled = _nearby_controls_enabled()
+        controller_buttons = _controller_buttons(get_xinput_state)
         if nearby_enabled:
-            controller_buttons = _controller_buttons(get_xinput_state)
             controller_pressed = bool((controller_buttons & XINPUT_OPEN_NEARBY_MASK) == XINPUT_OPEN_NEARBY_MASK)
             if controller_pressed and not controller_open_nearby_pressed and _hotkey_loop and not _nearby_hotkey_paused:
                 _hotkey_loop.call_soon_threadsafe(
@@ -466,11 +541,45 @@ def _hotkey_thread():
             controller_open_nearby_pressed = False
             controller_button_state.clear()
 
+        # -- Controle Xbox - waypoints
+        open_wp_mask = controller_hotkeys.get("open_waypoints", 0x1002)
+        wp_pressed = open_wp_mask and bool((controller_buttons & open_wp_mask) == open_wp_mask)
+        if wp_pressed and not controller_open_waypoints_pressed and _hotkey_loop and not _controller_hotkey_paused:
+            _hotkey_loop.call_soon_threadsafe(
+                asyncio.ensure_future, _hotkey_open_waypoints())
+        controller_open_waypoints_pressed = wp_pressed
+
+        if _waypoints_panel_open and not _controller_hotkey_paused:
+            for button_mask, action in XINPUT_WAYPOINT_INPUTS.items():
+                pressed = bool(controller_buttons & button_mask)
+                was_pressed = controller_wp_button_state.get(button_mask, False)
+                controller_wp_button_state[button_mask] = pressed
+                if not pressed or was_pressed:
+                    continue
+                # Nao processar botoes que fazem parte do combo de abertura
+                if button_mask & open_wp_mask and (controller_buttons & open_wp_mask) == open_wp_mask:
+                    continue
+                # Popup nao em foco: provavelmente prompt aberto — A confirma, B cancela
+                if not _waypoints_popup_is_foreground():
+                    if button_mask == XINPUT_GAMEPAD_A:
+                        _send_key_return()
+                    elif button_mask == XINPUT_GAMEPAD_B:
+                        _send_key_escape()
+                    continue
+                if _hotkey_loop:
+                    _hotkey_loop.call_soon_threadsafe(
+                        asyncio.ensure_future, _hotkey_waypoint_input(action))
+        else:
+            controller_wp_button_state.clear()
+
         for hk_id, cfg in hotkeys.items():
             if not cfg["enabled"]:
                 key_state[hk_id] = False
                 continue
             if hk_id == "open_nearby" and (not nearby_enabled or _nearby_hotkey_paused):
+                key_state[hk_id] = False
+                continue
+            if hk_id == "open_waypoints" and _nearby_hotkey_paused:
                 key_state[hk_id] = False
                 continue
 
@@ -498,6 +607,9 @@ def _hotkey_thread():
                     elif hk_id == "open_nearby":
                         _hotkey_loop.call_soon_threadsafe(
                             asyncio.ensure_future, _hotkey_open_nearby())
+                    elif hk_id == "open_waypoints":
+                        _hotkey_loop.call_soon_threadsafe(
+                            asyncio.ensure_future, _hotkey_open_waypoints())
 
             key_state[hk_id] = pressed
 
@@ -546,6 +658,14 @@ async def _hotkey_open_nearby():
 async def _hotkey_nearby_input(action: str):
     """Sends navigation command from the controller to the nearby popup.."""
     await _broadcast_all(json.dumps({"type": "nearby_input", "action": action}))
+
+async def _hotkey_open_waypoints():
+    """Toggle the waypoints panel (hotkey)."""
+    await _broadcast_all(json.dumps({"type": "open_waypoints"}))
+
+async def _hotkey_waypoint_input(action: str):
+    """Sends navigation command from the controller to the waypoints panel."""
+    await _broadcast_all(json.dumps({"type": "waypoint_input_wp", "action": action}))
 
 async def _broadcast_loop():
     global _engine, _last_pos

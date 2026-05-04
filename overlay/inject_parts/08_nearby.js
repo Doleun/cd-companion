@@ -36,6 +36,19 @@
     } catch (_) {}
     return enabled;
   }
+  function _nearbyStayInList() {
+    try {
+      const saved = localStorage.getItem(NEARBY_STAY_IN_LIST_KEY);
+      if (saved === '1') return true;
+      if (saved === '0') return false;
+    } catch (_) {}
+    return false;
+  }
+  function _setNearbyStayInList(value) {
+    const enabled = !!value;
+    try { localStorage.setItem(NEARBY_STAY_IN_LIST_KEY, enabled ? '1' : '0'); } catch (_) {}
+    return enabled;
+  }
   function _isMapGenieCategoryVisible(categoryId) {
     if (!_nearbyRespectMapVisibility()) return true;
     const categoriesMap = window.__cdMapGeniePatch?.categories?.categoriesMap;
@@ -350,6 +363,7 @@
       <div class="header-title">📍 Nearby</div>
       <div class="header-count" id="hcount"></div>
       <button class="header-toggle" id="mapFilterToggle" title="Respect the categories currently visible on the map">Map filters</button>
+      <button class="header-toggle" id="stayInListToggle" title="When enabled, focus stays in the current list after marking/unmarking">Stay in list</button>
     </div>
     <div class="content">
       <div class="lists">
@@ -390,6 +404,16 @@
       btn.title = enabled
         ? 'Nearby follows the categories currently visible on the map'
         : 'Nearby shows all categories, ignoring map category visibility';
+    }
+    function syncStayInListToggle() {
+      const btn = doc.getElementById('stayInListToggle');
+      if (!btn) return;
+      const enabled = _nearbyStayInList();
+      btn.className = `header-toggle ${enabled ? 'on' : 'off'}`;
+      btn.textContent = enabled ? 'Stay in list ON' : 'Stay in list OFF';
+      btn.title = enabled
+        ? 'Focus stays in the current list after marking/unmarking'
+        : 'Focus follows the item to the other list after marking/unmarking';
     }
 
     function toggleMapFilterMode() {
@@ -603,6 +627,7 @@
       if (!notfoundList || !foundList) return;
 
       syncMapFilterToggle();
+      syncStayInListToggle();
       ensureNearbySelection();
       const notfoundItems = nearbyGroup(false);
       const foundItems = nearbyGroup(true);
@@ -718,19 +743,52 @@
       });
     }
 
+    const stayInListToggle = doc.getElementById('stayInListToggle');
+    if (stayInListToggle) {
+      stayInListToggle.addEventListener('click', (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        _setNearbyStayInList(!_nearbyStayInList());
+        syncStayInListToggle();
+      });
+      stayInListToggle.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter' || e.key === ' ') {
+          e.preventDefault();
+          e.stopPropagation();
+          _setNearbyStayInList(!_nearbyStayInList());
+          syncStayInListToggle();
+        }
+      });
+    }
+
     function doToggle() {
       if (!items.length) return;
       const item = items[selectedIndex];
+      const originalList = activeFoundList;
+      const originalGroupIndex = Math.max(0, selectedGroupIndex());
+
       item.found = !item.found;
       setUserLocationFound(item.id, item.found);
-      // Delega ao mapManager: atualiza UI, faz o fetch interno e o nosso patch intercepta
-      // (sem _replayingToggle = true, então o broadcast é disparado normalmente)
       if (typeof window.mapManager?.markLocationAsFound === 'function') {
         window.mapManager.markLocationAsFound(parseInt(item.id, 10), item.found);
       }
       items.sort(_sortNearbyItems);
-      selectedIndex = items.findIndex(nextItem => nextItem.id === item.id);
-      activeFoundList = !!item.found;
+
+      if (_nearbyStayInList()) {
+        const remaining = nearbyGroup(originalList);
+        if (remaining.length > 0) {
+          const nextGroupIndex = Math.min(originalGroupIndex, remaining.length - 1);
+          selectNearbyGroupIndex(originalList, nextGroupIndex, true);
+        } else {
+          const otherList = !originalList;
+          if (nearbyGroup(otherList).length > 0) {
+            selectNearbyGroupIndex(otherList, 0, true);
+          }
+        }
+      } else {
+        selectedIndex = items.findIndex(nextItem => nextItem.id === item.id);
+        activeFoundList = !!item.found;
+      }
       render();
     }
 
@@ -799,6 +857,7 @@
 
     render();
     syncMapFilterToggle();
+    syncStayInListToggle();
     syncSelectedNearby(true);
     updateNearbyCircle();
     // Delay para Qt processar a criação da janela antes de focar

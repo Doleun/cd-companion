@@ -24,10 +24,25 @@ try:
     from server.main import (
         set_nearby_hotkey_paused as _set_nearby_hotkey_paused,
         set_nearby_popup_hwnd as _set_nearby_popup_hwnd,
+        set_controller_hotkey_paused as _set_controller_hotkey_paused,
+        set_waypoints_popup_hwnd as _set_waypoints_popup_hwnd,
     )
 except Exception:
     _set_nearby_hotkey_paused = None
     _set_nearby_popup_hwnd = None
+    _set_controller_hotkey_paused = None
+    _set_waypoints_popup_hwnd = None
+
+try:
+    from server.hotkeys import (
+        _load_controller_hotkey_settings, _save_controller_hotkey_settings,
+        _load_xinput_get_state, _controller_buttons,
+        XINPUT_BUTTON_NAMES, mask_to_name,
+        DEFAULT_CONTROLLER_HOTKEYS,
+    )
+    _HAS_CONTROLLER_HOTKEYS = True
+except Exception:
+    _HAS_CONTROLLER_HOTKEYS = False
 
 # ── Hotkey helpers ────────────────────────────────────────────────────
 _SAVE_DIR = os.path.join(os.environ.get('LOCALAPPDATA', ''), 'CD_Teleport')
@@ -422,6 +437,135 @@ class SettingsDialog(QDialog):
         hk_note.setStyleSheet('color:#64748b; font:11px "Segoe UI"; margin-top:-4px;')
         active_layout[0].addWidget(hk_note)
 
+        # Waypoints hotkey
+        wp_hk_lbl = QLabel('Waypoints hotkey')
+        self._waypoints_hk = QKeySequenceEdit()
+        self._waypoints_hk.setFixedHeight(32)
+        self._waypoints_hk.setAttribute(Qt.WA_StyledBackground, True)
+        self._waypoints_hk.setStyleSheet(
+            "QKeySequenceEdit{background:#e2e8f0;color:#111827;"
+            "border:1px solid #64748b;border-radius:6px;padding:4px 8px;"
+            "selection-background-color:#ffd060;selection-color:#111827;}"
+            "QKeySequenceEdit:focus{border:1px solid #ffd060;}")
+        wp_hk_line = self._waypoints_hk.findChild(QLineEdit)
+        if wp_hk_line:
+            wp_hk_line.setStyleSheet(
+                "QLineEdit{background:#e2e8f0;color:#111827;border:none;"
+                "selection-background-color:#ffd060;selection-color:#111827;}")
+        self._waypoints_hk.setToolTip('Restart overlay for the new hotkey to take effect')
+        self._waypoints_hk._hk_finalized = False
+
+        def _wp_on_seq_changed(seq):
+            first = seq.toString().split(', ')[0]
+            if first != seq.toString():
+                self._waypoints_hk.setKeySequence(QKeySequence(first))
+            self._waypoints_hk._hk_finalized = True
+
+        def _wp_hk_key_press(e):
+            if self._waypoints_hk._hk_finalized:
+                self._waypoints_hk.clear()
+                self._waypoints_hk._hk_finalized = False
+            QKeySequenceEdit.keyPressEvent(self._waypoints_hk, e)
+
+        def _wp_hk_focus_in(e):
+            if _set_nearby_hotkey_paused: _set_nearby_hotkey_paused(True)
+            QKeySequenceEdit.focusInEvent(self._waypoints_hk, e)
+        def _wp_hk_focus_out(e):
+            if _set_nearby_hotkey_paused: _set_nearby_hotkey_paused(False)
+            QKeySequenceEdit.focusOutEvent(self._waypoints_hk, e)
+        self._waypoints_hk.focusInEvent  = _wp_hk_focus_in
+        self._waypoints_hk.focusOutEvent = _wp_hk_focus_out
+        self._waypoints_hk.keySequenceChanged.connect(_wp_on_seq_changed)
+        self._waypoints_hk.keyPressEvent = _wp_hk_key_press
+        wp_hk_vk  = 0x59
+        wp_hk_mod = 0x10
+        try:
+            with open(_HOTKEY_SETTINGS_FILE, 'r', encoding='utf-8') as _f:
+                _wp_hk_data = json.load(_f).get('open_waypoints', {})
+                wp_hk_vk  = _wp_hk_data.get('vk',  wp_hk_vk)
+                wp_hk_mod = _wp_hk_data.get('mod', wp_hk_mod)
+        except Exception:
+            pass
+        self._waypoints_hk.setKeySequence(QKeySequence(_vk_to_seq_str(wp_hk_vk, wp_hk_mod)))
+        active_layout[0].addWidget(wp_hk_lbl)
+        active_layout[0].addWidget(self._waypoints_hk)
+        wp_hk_note = QLabel('Restart required to apply hotkey change.')
+        wp_hk_note.setStyleSheet('color:#64748b; font:11px "Segoe UI"; margin-top:-4px;')
+        active_layout[0].addWidget(wp_hk_note)
+
+        # Waypoints controller combo
+        if _HAS_CONTROLLER_HOTKEYS:
+            active_layout[0].addWidget(QLabel('Controller combo (open waypoints)'))
+            ctrl_row = QWidget()
+            ctrl_row_layout = QHBoxLayout(ctrl_row)
+            ctrl_row_layout.setContentsMargins(0, 0, 0, 0)
+            ctrl_row_layout.setSpacing(6)
+            _ctrl_settings = _load_controller_hotkey_settings()
+            _ctrl_mask = _ctrl_settings.get("open_waypoints", 0x1002)
+            self._wp_ctrl_display = QLineEdit(mask_to_name(_ctrl_mask))
+            self._wp_ctrl_display.setReadOnly(True)
+            self._wp_ctrl_display.setFixedHeight(32)
+            self._wp_ctrl_display.setStyleSheet(
+                "QLineEdit{background:#e2e8f0;color:#111827;border:1px solid #64748b;"
+                "border-radius:6px;padding:4px 8px;}")
+            self._wp_ctrl_record_btn = QPushButton('Record')
+            self._wp_ctrl_record_btn.setFixedHeight(32)
+            self._wp_ctrl_record_btn.setStyleSheet(
+                "QPushButton{background:rgba(255,208,96,.18);border:1px solid rgba(255,208,96,.5);"
+                "color:#ffd060;border-radius:6px;padding:0 10px;}"
+                "QPushButton:hover{background:rgba(255,208,96,.3);}"
+                "QPushButton:disabled{color:#666;border-color:#444;background:#222;}")
+            ctrl_row_layout.addWidget(self._wp_ctrl_display)
+            ctrl_row_layout.addWidget(self._wp_ctrl_record_btn)
+            active_layout[0].addWidget(ctrl_row)
+            ctrl_note = QLabel('Hold button combo on controller, then release. Restart required.')
+            ctrl_note.setWordWrap(True)
+            ctrl_note.setStyleSheet('color:#64748b; font:11px "Segoe UI"; margin-top:-4px;')
+            active_layout[0].addWidget(ctrl_note)
+
+            self._wp_ctrl_recording = False
+            self._wp_ctrl_peak_mask = 0
+            self._wp_ctrl_timer = QTimer()
+            self._wp_ctrl_timer.setInterval(50)
+            _get_xinput = _load_xinput_get_state()
+
+            def _ctrl_poll():
+                btns = _controller_buttons(_get_xinput)
+                self._wp_ctrl_peak_mask |= btns
+                if self._wp_ctrl_peak_mask and btns == 0:
+                    # Todos os botoes soltos — salvar e parar
+                    saved_mask = self._wp_ctrl_peak_mask
+                    self._wp_ctrl_timer.stop()
+                    self._wp_ctrl_recording = False
+                    self._wp_ctrl_record_btn.setText('Record')
+                    self._wp_ctrl_record_btn.setEnabled(True)
+                    self._wp_ctrl_display.setText(mask_to_name(saved_mask))
+                    if _set_controller_hotkey_paused:
+                        _set_controller_hotkey_paused(False)
+                    # Persistir imediatamente
+                    try:
+                        existing = _load_controller_hotkey_settings()
+                        existing["open_waypoints"] = saved_mask
+                        _save_controller_hotkey_settings(existing)
+                    except Exception:
+                        pass
+
+            self._wp_ctrl_timer.timeout.connect(_ctrl_poll)
+
+            def _start_record():
+                if self._wp_ctrl_recording:
+                    return
+                self._wp_ctrl_recording = True
+                self._wp_ctrl_peak_mask = 0
+                self._wp_ctrl_display.setFocus()
+                self._wp_ctrl_record_btn.setText('Recording...')
+                self._wp_ctrl_record_btn.setEnabled(False)
+                if _set_controller_hotkey_paused:
+                    _set_controller_hotkey_paused(True)
+                self._wp_ctrl_timer.start()
+
+            self._wp_ctrl_record_btn.clicked.connect(_start_record)
+
         # Direction arrow
         section('Performance', 'right')
         option('disableGpuVsync', 'Disable GPU vsync (multi-monitor fix)',
@@ -527,6 +671,8 @@ class SettingsDialog(QDialog):
         if parsed is None:
             return
         vk, mod = parsed
+        wp_seq_str = self._waypoints_hk.keySequence().toString()
+        wp_parsed = _seq_str_to_vk(wp_seq_str)
         try:
             try:
                 with open(_HOTKEY_SETTINGS_FILE, 'r', encoding='utf-8') as f:
@@ -534,6 +680,9 @@ class SettingsDialog(QDialog):
             except Exception:
                 data = {}
             data['open_nearby'] = {'vk': vk, 'mod': mod, 'enabled': True}
+            if wp_parsed is not None:
+                wp_vk, wp_mod = wp_parsed
+                data['open_waypoints'] = {'vk': wp_vk, 'mod': wp_mod, 'enabled': True}
             os.makedirs(os.path.dirname(_HOTKEY_SETTINGS_FILE), exist_ok=True)
             with open(_HOTKEY_SETTINGS_FILE, 'w', encoding='utf-8') as f:
                 json.dump(data, f, indent=2)
@@ -552,6 +701,7 @@ class PopupWebWindow(QMainWindow):
         self.setWindowFlags(Qt.Tool | Qt.WindowStaysOnTopHint | Qt.WindowCloseButtonHint)
         self.setAttribute(Qt.WA_DeleteOnClose)
         self._is_nearby_popup = False
+        self._is_waypoints_popup = False
         self.resize(300, 560)
         self._view = QWebEngineView(self)
         self._page = QWebEnginePage(self._view)
@@ -564,9 +714,16 @@ class PopupWebWindow(QMainWindow):
         if _set_nearby_popup_hwnd:
             _set_nearby_popup_hwnd(int(self.winId()))
 
+    def mark_waypoints_popup(self):
+        self._is_waypoints_popup = True
+        if _set_waypoints_popup_hwnd:
+            _set_waypoints_popup_hwnd(int(self.winId()))
+
     def closeEvent(self, event):
         if self._is_nearby_popup and _set_nearby_popup_hwnd:
             _set_nearby_popup_hwnd(None)
+        if self._is_waypoints_popup and _set_waypoints_popup_hwnd:
+            _set_waypoints_popup_hwnd(None)
         self.closed_with_pos.emit(self.pos())
         super().closeEvent(event)
         QTimer.singleShot(50, focus_game_window)
@@ -593,7 +750,8 @@ class InterceptPage(QWebEnginePage):
         popup._page.geometryChangeRequested.connect(
             lambda rect, p=popup: p.resize(rect.width(), rect.height()))
         popup._page.titleChanged.connect(
-            lambda title, p=popup: p.mark_nearby_popup() if title == 'Nearby Locations' else None)
+            lambda title, p=popup: p.mark_nearby_popup() if title == 'Nearby Locations' else
+            p.mark_waypoints_popup() if title == 'CD Waypoints' else None)
         self._position_popup(popup, overlay)
         popup.show()
         QTimer.singleShot(0, lambda: self._activate_popup(popup))
