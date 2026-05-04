@@ -772,10 +772,10 @@
       } else if (e.key === 'ArrowUp' || e.key.toLowerCase() === 'w') {
         e.preventDefault();
         moveNearbyVertical(-1);
-      } else if (e.key === 'ArrowLeft') {
+      } else if (e.key === 'ArrowLeft' || e.key.toLowerCase() === 'a') {
         e.preventDefault();
         moveNearbyHorizontal(-1);
-      } else if (e.key === 'ArrowRight') {
+      } else if (e.key === 'ArrowRight' || e.key.toLowerCase() === 'd') {
         e.preventDefault();
         moveNearbyHorizontal(1);
       } else if (e.key === 'Enter' || e.key === ' ') {
