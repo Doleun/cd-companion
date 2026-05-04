@@ -1,3 +1,15 @@
+// =============================================================================
+// NAO EDITAR ESTE ARQUIVO DIRETAMENTE.
+//
+// Este arquivo e gerado/fallback. A fonte de verdade sao os fragmentos em:
+//   overlay/inject_parts/
+//
+// Para editar qualquer comportamento do JS injetado:
+//   1. Identifique o fragmento correto em overlay/inject_parts/ (ver AGENTS.md
+//      em research/inject_parts_agents.md)
+//   2. Edite o fragmento correspondente
+//   3. Valide: python scripts/check_inject.py
+// =============================================================================
 
 (function () {
   const iv = setInterval(() => {
