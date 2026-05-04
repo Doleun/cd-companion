@@ -1,0 +1,312 @@
+  // ── Botão flutuante para abrir/fechar waypoints ───────────────────
+  function ensureWpToggleBtn() {
+    if (document.getElementById('cdWpToggle')) return;
+    const btn = document.createElement('button');
+    btn.id = 'cdWpToggle';
+    btn.title = 'Waypoints  (abrir/fechar)';
+    btn.textContent = '⭕';
+    btn.style.cssText = `position:fixed;bottom:12px;left:12px;z-index:10000;
+      width:36px;height:36px;border-radius:50%;
+      background:rgba(12,12,18,.9);border:1px solid rgba(255,208,96,.35);
+      color:#ffd060;font:16px 'Segoe UI';cursor:pointer;
+      box-shadow:0 3px 12px rgba(0,0,0,.5);
+      display:flex;align-items:center;justify-content:center;
+      backdrop-filter:blur(4px);transition:border-color .15s,background .15s`;
+    btn.addEventListener('mouseenter', () => {
+      btn.style.background = 'rgba(255,208,96,.18)';
+      btn.style.borderColor = 'rgba(255,208,96,.7)';
+    });
+    btn.addEventListener('mouseleave', () => {
+      btn.style.background = 'rgba(12,12,18,.9)';
+      btn.style.borderColor = 'rgba(255,208,96,.35)';
+    });
+    btn.addEventListener('click', () => {
+      if (ensureWaypointPopup()) return;
+      const panel = document.getElementById('cdWpPanel');
+      if (!panel) { ensureWaypointPanel(); return; }
+      const visible = panel.style.display !== 'none';
+      panel.style.display = visible ? 'none' : 'flex';
+    });
+    document.body.appendChild(btn);
+  }
+
+  function ensureCenterTeleportBtn() {
+    if (document.getElementById('cdCenterTp')) return;
+    const btn = document.createElement('button');
+    btn.id = 'cdCenterTp';
+    btn.title = 'Abrir teleporte para o centro da tela';
+    btn.textContent = '◎';
+    btn.style.cssText = `position:fixed;bottom:12px;left:56px;z-index:10000;
+      width:36px;height:36px;border-radius:50%;
+      background:rgba(12,12,18,.9);border:1px solid rgba(100,160,255,.4);
+      color:#80b4ff;font:18px 'Segoe UI';cursor:pointer;
+      box-shadow:0 3px 12px rgba(0,0,0,.5);
+      display:flex;align-items:center;justify-content:center;
+      backdrop-filter:blur(4px);transition:border-color .15s,background .15s`;
+    btn.addEventListener('mouseenter', () => {
+      btn.style.background = 'rgba(100,160,255,.18)';
+      btn.style.borderColor = 'rgba(100,160,255,.75)';
+    });
+    btn.addEventListener('mouseleave', () => {
+      btn.style.background = 'rgba(12,12,18,.9)';
+      btn.style.borderColor = 'rgba(100,160,255,.4)';
+    });
+    btn.addEventListener('click', () => {
+      const panel = document.getElementById('cdCenterTpPanel');
+      if (!panel) { ensureCenterTeleportPanel(); return; }
+      const visible = panel.style.display !== 'none';
+      panel.style.display = visible ? 'none' : 'flex';
+    });
+    document.body.appendChild(btn);
+  }
+
+  function ensureCenterTeleportPanel() {
+    if (document.getElementById('cdCenterTpPanel')) return;
+    const el = document.createElement('div');
+    el.id = 'cdCenterTpPanel';
+    el.style.cssText = `position:fixed;bottom:56px;left:56px;z-index:9999;
+      background:rgba(12,12,18,.92);color:#e8e8e8;
+      font:12px/1.5 'Segoe UI',system-ui,sans-serif;
+      border:1px solid rgba(100,160,255,.3);border-radius:7px;
+      padding:8px 10px;width:210px;backdrop-filter:blur(5px);
+      box-shadow:0 4px 18px rgba(0,0,0,.5);
+      display:none;flex-direction:column;gap:7px;overflow:hidden`;
+    el.innerHTML = `
+      <div style="display:flex;align-items:center;gap:6px">
+        <span style="color:#80b4ff;font-weight:600;flex:1;font-size:12px">Centro da tela</span>
+      </div>
+      <div style="display:flex;align-items:center;gap:7px">
+        <span style="color:#bbb;font-size:11px;white-space:nowrap">Y <span id="cdCenterPanelYVal">${Math.round(getCenterTeleportY())}</span></span>
+        <input type="range" id="cdCenterPanelY" min="-5000" max="5000" step="10"
+          value="${getCenterTeleportY()}"
+          style="flex:1;min-width:110px;accent-color:#80b4ff;cursor:pointer">
+      </div>
+      <button id="cdCenterPanelTp" title="Teleportar para o centro da tela"
+        style="background:rgba(100,160,255,.14);border:1px solid rgba(100,160,255,.45);
+        color:#80b4ff;font:11px 'Segoe UI';padding:4px 8px;border-radius:4px;
+        cursor:pointer;width:100%">
+        Teleportar
+      </button>
+    `;
+    document.body.appendChild(el);
+    document.getElementById('cdCenterPanelY').addEventListener('input', (e) => {
+      if (!setCenterTeleportY(e.target.value)) e.target.value = getCenterTeleportY();
+    });
+    document.getElementById('cdCenterPanelTp').addEventListener('click', teleportMapCenter);
+  }
+
+  function getWaypointPopupDoc() {
+    try {
+      if (waypointPopup && !waypointPopup.closed && waypointPopup.document)
+        return waypointPopup.document;
+    } catch (_) {}
+    return null;
+  }
+
+  function bindWaypointPopupControls(doc) {
+    const save = doc.getElementById('cdWpPopupSave');
+    const filter = doc.getElementById('cdWpPopupFilter');
+    if (filter) {
+      filter.value = waypointFilter;
+      filter.addEventListener('input', () => setWaypointFilter(filter.value));
+    }
+    if (save) save.addEventListener('click', () => {
+      const name = prompt('Nome do waypoint:', lastPos
+        ? `${lastPos.realm === 'abyss' ? '[Abyss] ' : ''}${Math.round(lastPos.x)}, ${Math.round(lastPos.z)}`
+        : 'Waypoint');
+      if (name !== null) sendCmd({ cmd: 'save_waypoint', name });
+    });
+  }
+
+  function ensureWaypointPopup() {
+    try {
+      if (waypointPopup && !waypointPopup.closed) {
+        waypointPopup.focus();
+        return true;
+      }
+    } catch (_) {
+      waypointPopup = null;  // janela Qt destruída — reseta referência
+    }
+    try {
+      waypointPopup = window.open('', 'cdOverlayWaypoints',
+        'width=300,height=560,resizable=yes,scrollbars=no');
+      if (!waypointPopup) return false;
+      const doc = waypointPopup.document;
+      doc.open();
+      doc.write(`<!doctype html>
+        <html>
+        <head>
+          <meta charset="utf-8">
+          <title>CD Waypoints</title>
+          <style>
+            html,body{
+              margin:0;width:100%;height:100%;overflow:hidden;
+              background:#0f0f1a;color:#e8e8e8;
+              font:12px/1.5 'Segoe UI',system-ui,sans-serif;
+            }
+            *{box-sizing:border-box}
+            button{font-family:'Segoe UI',system-ui,sans-serif}
+            .wrap{
+              height:100%;display:flex;flex-direction:column;gap:7px;
+              padding:10px;background:rgba(12,12,18,.96);
+              border:1px solid rgba(255,208,96,.25);
+            }
+            .row{display:flex;align-items:center;gap:6px;flex-shrink:0}
+            .title{flex:1;font-size:12px;font-weight:600;color:#ffd060}
+            .list{
+              display:flex;flex-direction:column;gap:3px;overflow-y:auto;
+              min-height:72px;border-radius:5px;
+            }
+            #cdWpPopupList{flex:1}
+            .sep{height:1px;background:rgba(255,255,255,.07);flex-shrink:0}
+            .filter{
+              width:100%;flex-shrink:0;border-radius:5px;
+              background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.12);
+              color:#e8e8e8;padding:5px 8px;outline:none;
+            }
+            .filter:focus{border-color:rgba(255,208,96,.45)}
+            .btn{
+              border-radius:4px;cursor:pointer;padding:3px 8px;
+              background:rgba(255,208,96,.13);
+              border:1px solid rgba(255,208,96,.35);color:#ffd060;
+            }
+            .btn.blue{
+              background:rgba(100,160,255,.11);
+              border-color:rgba(100,160,255,.35);color:#80b4ff;
+            }
+            .full{width:100%;flex-shrink:0}
+          </style>
+        </head>
+        <body>
+          <div class="wrap">
+            <div class="row">
+              <div class="title">Waypoints</div>
+              <button id="cdWpPopupSave" class="btn">+ Salvar</button>
+            </div>
+            <input id="cdWpPopupFilter" class="filter" placeholder="Filtrar waypoints">
+            <div id="cdWpPopupList" class="list"></div>
+          </div>
+        </body>
+        </html>`);
+      doc.close();
+      bindWaypointPopupControls(doc);
+      renderWaypoints();
+      waypointPopup.focus();
+      return true;
+    } catch (_) {
+      waypointPopup = null;
+      return false;
+    }
+  }
+
+  // ── Painel de Waypoints (esquerda) ────────────────────────────────
+  function ensureWaypointPanel() {
+    if (document.getElementById('cdWpPanel')) return;
+    const el = document.createElement('div');
+    el.id = 'cdWpPanel';
+    el.style.cssText = `position:fixed;bottom:56px;left:12px;z-index:9999;
+      background:rgba(12,12,18,.92);color:#e8e8e8;
+      font:12px/1.5 'Segoe UI',system-ui,sans-serif;
+      border:1px solid rgba(255,208,96,.25);border-radius:7px;
+      padding:8px 10px;width:224px;max-height:520px;
+      backdrop-filter:blur(5px);box-shadow:0 4px 18px rgba(0,0,0,.5);
+      display:none;flex-direction:column;gap:5px;overflow:hidden;`;
+    el.innerHTML = `
+      <div style="display:flex;align-items:center;gap:6px">
+        <span style="color:#ffd060;font-weight:600;flex:1;font-size:12px">⭕ Waypoints</span>
+        <button id="cdWpSave" title="Save current position"
+          style="background:rgba(255,208,96,.15);border:1px solid rgba(255,208,96,.4);
+          color:#ffd060;font:11px 'Segoe UI';padding:2px 8px;border-radius:4px;cursor:pointer">
+          + Salvar
+        </button>
+      </div>
+      <input id="cdWpFilter" placeholder="Filtrar waypoints"
+        style="width:100%;background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.12);
+        color:#e8e8e8;font:11px 'Segoe UI';padding:4px 7px;border-radius:4px;outline:none">
+      <div id="cdWpList" style="overflow-y:auto;max-height:170px;display:flex;
+        flex-direction:column;gap:3px;flex-shrink:0"></div>
+    `;
+    document.body.appendChild(el);
+
+    document.getElementById('cdWpFilter').addEventListener('input', (e) => setWaypointFilter(e.target.value));
+    document.getElementById('cdWpSave').addEventListener('click', () => {
+      const name = prompt('Nome do waypoint:', lastPos
+        ? `${lastPos.realm === 'abyss' ? '[Abyss] ' : ''}${Math.round(lastPos.x)}, ${Math.round(lastPos.z)}`
+        : 'Waypoint');
+      if (name !== null) sendCmd({ cmd: 'save_waypoint', name });
+    });
+  }
+
+  function setWaypointFilter(value) {
+    waypointFilter = (value || '').trim().toLowerCase();
+    const panelInput = document.getElementById('cdWpFilter');
+    const popupInput = getWaypointPopupDoc()?.getElementById('cdWpPopupFilter');
+    if (panelInput && panelInput.value !== value) panelInput.value = value || '';
+    if (popupInput && popupInput.value !== value) popupInput.value = value || '';
+    renderWaypoints();
+  }
+
+  function matchesWaypointFilter(wp) {
+    if (!waypointFilter) return true;
+    const text = [
+      wp.name,
+      wp.realm,
+      wp.absX, wp.absY, wp.absZ,
+      wp.x, wp.y, wp.z
+    ].filter(v => v !== undefined && v !== null).join(' ').toLowerCase();
+    return text.includes(waypointFilter);
+  }
+
+  function renderWaypointList(list) {
+    if (!list) return;
+    if (waypoints.length === 0) {
+      list.innerHTML = `<div style="color:#555;font-size:11px;text-align:center;padding:4px 0">
+        Nenhum waypoint salvo</div>`;
+      return;
+    }
+    const items = waypoints
+      .map((wp, i) => ({ wp, i }))
+      .filter(item => matchesWaypointFilter(item.wp));
+    if (items.length === 0) {
+      list.innerHTML = `<div style="color:#555;font-size:11px;text-align:center;padding:4px 0">
+        Nenhum waypoint encontrado</div>`;
+      return;
+    }
+    list.innerHTML = items.map(({ wp, i }) => `
+      <div style="display:flex;align-items:center;gap:4px;background:rgba(255,255,255,.04);
+        border-radius:4px;padding:3px 6px;">
+        <span style="flex:1;font-size:11px;white-space:nowrap;overflow:hidden;
+          text-overflow:ellipsis;color:#ccc" title="${wp.name}">${wp.name}</span>
+        <button data-tp="${i}" title="Teleportar"
+          style="background:rgba(255,208,96,.15);border:1px solid rgba(255,208,96,.35);
+          color:#ffd060;font:10px 'Segoe UI';padding:1px 5px;border-radius:3px;
+          cursor:pointer;flex-shrink:0">⭕</button>
+        <button data-del="${i}" title="Remover"
+          style="background:transparent;border:none;color:#555;font:12px monospace;
+          cursor:pointer;padding:0 2px;flex-shrink:0">✕</button>
+      </div>
+    `).join('');
+
+    list.querySelectorAll('[data-tp]').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const wp = waypoints[+btn.dataset.tp];
+        if (wp) {
+          hasPreTeleport = true;
+          updatePanel();
+          sendCmd({ cmd: 'teleport', x: wp.absX, y: wp.absY, z: wp.absZ });
+        }
+      });
+    });
+    list.querySelectorAll('[data-del]').forEach(btn => {
+      btn.addEventListener('click', () => {
+        sendCmd({ cmd: 'delete_waypoint', index: +btn.dataset.del });
+      });
+    });
+  }
+
+  function renderWaypoints() {
+    ensureWaypointPanel();
+    renderWaypointList(document.getElementById('cdWpList'));
+    renderWaypointList(getWaypointPopupDoc()?.getElementById('cdWpPopupList'));
+  }
+
