@@ -723,6 +723,7 @@ def main():
         sys.argv += ['--disable-gpu-vsync']
 
     app = QApplication(sys.argv)
+    app.setQuitOnLastWindowClosed(False)
     app.setApplicationName('CD Map Overlay')
     screen_w, screen_h = get_screen_size()
 
