@@ -193,7 +193,7 @@ class SettingsDialog(QDialog):
         self.setWindowFlags(self.windowFlags() | Qt.WindowStaysOnTopHint)
         self.setStyleSheet(SETTINGS_STYLE)
         self.setMinimumWidth(749)
-        self.resize(811, 480)
+        self.resize(811, 495)
         self._cfg = cfg
         self._original_opacity = parent.windowOpacity() if parent else 1.0
 
