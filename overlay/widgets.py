@@ -208,7 +208,7 @@ class SettingsDialog(QDialog):
             "background:#0f0f1a;}"
             "QTabBar::tab{background:#1a1a2e;color:#94a3b8;border:1px solid #2d2d44;"
             "border-bottom:none;border-top-left-radius:6px;border-top-right-radius:6px;"
-            "padding:6px 20px;margin-right:2px;font:12px 'Segoe UI';}"
+            "padding:6px 20px;margin-right:2px;font:12px 'Segoe UI';min-width:70px;}"
             "QTabBar::tab:selected{background:#151528;color:#ffd060;"
             "border-color:#ffd060;border-bottom:1px solid #151528;}"
             "QTabBar::tab:hover:!selected{background:#252540;color:#e2e8f0;}")
