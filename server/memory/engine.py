@@ -17,13 +17,15 @@ from server.memory.constants import (
 )
 from server.memory.hook_cache import _load_hook_offsets, _save_hook_offsets
 from server.memory.reader import ReaderMixin
+from server.memory.teleport import TeleportMixin
+from server.memory.shared_mem import SharedMemoryMixin
 
 log = logging.getLogger('cd_server')
 
 
 # ── TeleportEngine (position reading only) ───────────────────────────
 
-class TeleportEngine(ReaderMixin):
+class TeleportEngine(SharedMemoryMixin, ReaderMixin, TeleportMixin):
     AOB_ENTITY = b'\x48\x83\xEC\x50\x48\x8B\xF9\x48\x8B\x91\x30\x11\x00\x00'
     AOB_POS    = b'\x0F\x11\x99\x90\x00\x00\x00'
     AOB_HEALTH = b'\x48\x8B\x46\x08\x48\x89\xF1'
@@ -177,60 +179,6 @@ class TeleportEngine(ReaderMixin):
             except Exception:
                 pass
         return bytes(data), base
-
-    # ── Freedom Flyer shared memory integration ────────────────────────
-
-    FF_SHARED_MEMORY_NAME = "CrimsonDesert_PlayerBase_SharedMem_Bambozu"
-
-    # Setup argtypes para APIs de shared memory (evita SEH crash no Windows).
-    try:
-        _k32 = ctypes.windll.kernel32
-        _k32.OpenFileMappingW.argtypes = [ctypes.c_ulong, ctypes.c_int, ctypes.c_wchar_p]
-        _k32.OpenFileMappingW.restype  = ctypes.c_void_p
-        _k32.MapViewOfFile.argtypes = [ctypes.c_void_p, ctypes.c_ulong, ctypes.c_ulong, ctypes.c_ulong, ctypes.c_size_t]
-        _k32.MapViewOfFile.restype  = ctypes.c_void_p
-        _k32.UnmapViewOfFile.argtypes = [ctypes.c_void_p]
-        _k32.UnmapViewOfFile.restype  = ctypes.c_int
-        _k32.CloseHandle.argtypes = [ctypes.c_void_p]
-        _k32.CloseHandle.restype  = ctypes.c_int
-    except Exception:
-        pass
-
-    def _read_ff_shared_entity(self):
-        """Lê o endereço do player base da shared memory do Freedom Flyer.
-        Retorna o endereço (int) ou 0 se indisponível."""
-        try:
-            FILE_MAP_READ = 0x0004
-            handle = k32.OpenFileMappingW(FILE_MAP_READ, 0,
-                                          self.FF_SHARED_MEMORY_NAME)
-            if not handle:
-                return 0
-            try:
-                ptr = k32.MapViewOfFile(handle, FILE_MAP_READ, 0, 0, 8)
-                if not ptr:
-                    return 0
-                try:
-                    return ctypes.c_ulonglong.from_address(ptr).value
-                finally:
-                    k32.UnmapViewOfFile(ptr)
-            finally:
-                k32.CloseHandle(handle)
-        except Exception:
-            return 0
-
-    def refresh_entity_base(self):
-        """Atualiza td+0x18 via shared memory do Freedom Flyer.
-        Chamado periodicamente pelo broadcast loop para cobrir load screens."""
-        if not self.use_shared_memory_entity or not self.td or not self.pm:
-            return False
-        entity = self._read_ff_shared_entity()
-        if not entity:
-            return False
-        try:
-            self.pm.write_ulonglong(self.td + 0x18, entity)
-            return True
-        except Exception:
-            return False
 
     def _canonical_orig_bytes(self, hook_addr):
         if hook_addr == self.hook_a:
@@ -904,30 +852,4 @@ class TeleportEngine(ReaderMixin):
                 pass
         self.orig_bytes.clear()
         self.hooks_installed = False
-
-    def set_invuln(self, on: bool):
-        if not self.teleport_enabled:
-            return
-        if self.inv:
-            try:
-                self.pm.write_bytes(self.inv, b'\x01' if on else b'\x00', 1)
-            except Exception:
-                pass
-
-    def teleport_to_abs(self, abs_x, abs_y, abs_z):
-        if not self.teleport_enabled:
-            return False, "Teleport is disabled in settings"
-        # Método preferido: delta injection via hook_e (physics loop)
-        # [r13] opera no mesmo espaço que os static globals e get_player_pos()
-        # (coordenadas absolutas) — não subtrair world_offset aqui.
-        if self.tp and self.hook_e and self.xyz_addr[0]:
-            try:
-                data = struct.pack('<ffffI', abs_x, abs_y, abs_z, 0.0, 1)
-                self.pm.write_bytes(self.tp, data, len(data))
-                log.info("Teleport queued: (%.1f, %.1f, %.1f)", abs_x, abs_y, abs_z)
-                return True, ""
-            except Exception as e:
-                return False, str(e)
-
-        return False, "Physics delta hook not installed — hook_e AOB not found for this patch"
 
