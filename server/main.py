@@ -405,7 +405,17 @@ def set_waypoints_panel_open(open_: bool):
     global _waypoints_panel_open
     _waypoints_panel_open = open_
     if not open_ and _waypoints_close_cb:
-        _waypoints_close_cb()
+        # Delay para que o botão B do controller seja solto antes de devolver
+        # foco ao jogo — evita que o jogo processe o B residual.
+        loop = _hotkey_loop
+        if loop:
+            def _delayed_focus():
+                # Só devolve foco se o painel continua fechado
+                if not _waypoints_panel_open:
+                    _waypoints_close_cb()
+            loop.call_later(0.2, _delayed_focus)
+        else:
+            _waypoints_close_cb()
 
 def set_nearby_hotkey_paused(paused: bool):
     global _nearby_hotkey_paused
