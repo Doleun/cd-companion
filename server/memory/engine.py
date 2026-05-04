@@ -5,7 +5,6 @@ Extraído de position_server.py para melhor organização.
 
 import ctypes
 import ctypes.wintypes
-import json
 import logging
 import os
 import struct
@@ -19,51 +18,13 @@ from shared.coord_math import (
     camera_heading as _calc_camera_heading,
 )
 
+from server.memory.constants import (
+    PROCESS_NAME, SAVE_DIR, HOOK_OFFSETS_FILE, HEIGHT_BOOST,
+    k32, MEM_COMMIT, MEM_RESERVE, MEM_RELEASE, PAGE_EXECUTE_READWRITE, _REDACT,
+)
+from server.memory.hook_cache import _load_hook_offsets, _save_hook_offsets
+
 log = logging.getLogger('cd_server')
-
-# Quando rodando como exe compilado, oculta endereços de memória dos logs.
-# Em desenvolvimento (script), exibe normalmente para debug.
-_REDACT = getattr(sys, 'frozen', False)
-
-# ── Constantes de memória ────────────────────────────────────────────
-
-PROCESS_NAME = "CrimsonDesert.exe"
-SAVE_DIR = os.path.join(os.environ.get("LOCALAPPDATA", ""), "CD_Teleport")
-HOOK_OFFSETS_FILE = os.path.join(SAVE_DIR, "cd_hook_offsets.json")
-HEIGHT_BOOST = 10.0
-
-k32 = ctypes.windll.kernel32
-k32.VirtualAllocEx.restype = ctypes.c_ulonglong
-k32.VirtualAllocEx.argtypes = [
-    ctypes.c_void_p, ctypes.c_ulonglong, ctypes.c_size_t,
-    ctypes.c_ulong, ctypes.c_ulong,
-]
-k32.VirtualFreeEx.argtypes = [
-    ctypes.c_void_p, ctypes.c_ulonglong, ctypes.c_size_t, ctypes.c_ulong,
-]
-
-MEM_COMMIT  = 0x1000
-MEM_RESERVE = 0x2000
-MEM_RELEASE = 0x8000
-PAGE_EXECUTE_READWRITE = 0x40
-
-
-def _load_hook_offsets():
-    try:
-        with open(HOOK_OFFSETS_FILE, 'r', encoding='utf-8') as f:
-            data = json.load(f)
-        return data if isinstance(data, dict) else {}
-    except Exception:
-        return {}
-
-
-def _save_hook_offsets(data):
-    try:
-        os.makedirs(SAVE_DIR, exist_ok=True)
-        with open(HOOK_OFFSETS_FILE, 'w', encoding='utf-8') as f:
-            json.dump(data, f, indent=2)
-    except Exception:
-        pass
 
 
 # ── TeleportEngine (position reading only) ───────────────────────────
