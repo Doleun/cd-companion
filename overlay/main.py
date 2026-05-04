@@ -120,13 +120,32 @@ def find_game_window_rect():
 
 # ── JS injetado no MapGenie ───────────────────────────────────────────
 # Extraído para overlay_inject.js — lido em runtime com Template substitution.
+# Se overlay/inject_parts/ existir com todos os 13 fragmentos, usa os fragmentos
+# concatenados em ordem. Caso contrário, lê inject.js normalmente (fallback).
 
 from string import Template as _Template
 
+_INJECT_PARTS = [
+    '00_bootstrap.js', '01_state.js', '02_tooltip.js', '03_marker.js',
+    '04_arrow.js', '05_panel.js', '06_teleport.js', '07_location_sync.js',
+    '08_nearby.js', '09_websocket.js', '10_waypoints.js', '11_layout.js',
+    '12_init.js',
+]
+
 def _load_inject_js():
-    js_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'inject.js')
-    with open(js_path, 'r', encoding='utf-8') as f:
-        raw = f.read()
+    _dir = os.path.dirname(os.path.abspath(__file__))
+    parts_dir = os.path.join(_dir, 'inject_parts')
+    if os.path.isdir(parts_dir) and all(
+        os.path.isfile(os.path.join(parts_dir, p)) for p in _INJECT_PARTS
+    ):
+        parts = []
+        for p in _INJECT_PARTS:
+            with open(os.path.join(parts_dir, p), encoding='utf-8') as f:
+                parts.append(f.read())
+        raw = ''.join(parts)
+    else:
+        with open(os.path.join(_dir, 'inject.js'), encoding='utf-8') as f:
+            raw = f.read()
     return _Template(raw).safe_substitute(WS_URL=WS_URL)
 
 INJECT_JS = _load_inject_js()
