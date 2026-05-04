@@ -29,11 +29,9 @@ from server.memory.engine import (
     _load_hook_offsets, _save_hook_offsets,
 )
 from shared.coord_math import (
-    DEFAULT_CALIBRATIONS,
     game_to_lnglat,
     lnglat_to_game,
     calibration_span as _calibration_span,
-    is_calibration_usable as _is_calibration_usable,
 )
 
 # Suprime erros de handshake inválido (ex: checagem TCP do launcher)
@@ -110,176 +108,41 @@ POS_CHANGE_THRESHOLD = 0.01  # squared distance threshold to consider position c
 IDLE_BROADCAST_INTERVAL = 1.0  # seconds between broadcasts when position unchanged
 CAMERA_HEADING_HEARTBEAT_INTERVAL = 1.0  # seconds between unchanged camera broadcasts
 
-# ── Hotkeys globais ──────────────────────────────────────────────────
+# ── Hotkeys globais ──────────────────────────────────────────────────────────
+from server.hotkeys import (
+    HOTKEY_SETTINGS_FILE, DEFAULT_HOTKEYS,
+    VK_NAMES, VK_MOD_SHIFT, VK_MOD_CTRL, VK_MOD_ALT, MOD_NAMES,
+    XINPUT_GAMEPAD_DPAD_UP, XINPUT_GAMEPAD_DPAD_DOWN,
+    XINPUT_GAMEPAD_DPAD_LEFT, XINPUT_GAMEPAD_DPAD_RIGHT,
+    XINPUT_GAMEPAD_BACK, XINPUT_GAMEPAD_LEFT_SHOULDER,
+    XINPUT_GAMEPAD_A, XINPUT_GAMEPAD_B,
+    XINPUT_OPEN_NEARBY_MASK, XINPUT_NEARBY_INPUTS,
+    XINPUT_GAMEPAD, XINPUT_STATE,
+    _load_xinput_get_state, _controller_buttons,
+    _load_hotkey_settings, _save_hotkey_settings,
+    _nearby_controls_enabled,
+)
 
-HOTKEY_SETTINGS_FILE = os.path.join(SAVE_DIR, "cd_hotkeys.json")
+# ── Calibracao + Waypoints ───────────────────────────────────────────────────
+from server.persistence import (
+    CALIBRATION_FILES,
+    _load_calibration, _save_calibration, _get_cal, _cal_cache,
+    WAYPOINTS_FILE, _load_waypoints, _save_waypoints,
+)
 
-DEFAULT_HOTKEYS = {
-    "teleport_marker": {"vk": 0x74, "mod": 0,    "enabled": True},   # F5
-    "abort":           {"vk": 0x74, "mod": 0x10,  "enabled": True},   # Shift+F5
-    "open_nearby":     {"vk": 0x4E, "mod": 0x10,  "enabled": True},   # Shift+N
-}
+# ── WebSocket transport ───────────────────────────────────────────────────────
+from server.ws_transport import (
+    _clients, _client_locks, _client_options,
+    _safe_send, _safe_send_many, _broadcast_all, _client_label,
+    _broadcast_realtime, get_latest_realtime_frame,
+)
 
-# Windows virtual key codes
-VK_NAMES = {
-    0x70: "F1", 0x71: "F2", 0x72: "F3", 0x73: "F4", 0x74: "F5", 0x75: "F6",
-    0x76: "F7", 0x77: "F8", 0x78: "F9", 0x79: "F10", 0x7A: "F11", 0x7B: "F12",
-    0x4E: "N",
-}
-VK_MOD_SHIFT = 0x10
-VK_MOD_CTRL  = 0x11
-VK_MOD_ALT   = 0x12
-MOD_NAMES = {VK_MOD_CTRL: "Ctrl", VK_MOD_ALT: "Alt", VK_MOD_SHIFT: "Shift"}
-
-XINPUT_GAMEPAD_DPAD_UP = 0x0001
-XINPUT_GAMEPAD_DPAD_DOWN = 0x0002
-XINPUT_GAMEPAD_DPAD_LEFT = 0x0004
-XINPUT_GAMEPAD_DPAD_RIGHT = 0x0008
-XINPUT_GAMEPAD_BACK = 0x0020
-XINPUT_GAMEPAD_LEFT_SHOULDER = 0x0100
-XINPUT_GAMEPAD_A = 0x1000
-XINPUT_GAMEPAD_B = 0x2000
-XINPUT_OPEN_NEARBY_MASK = XINPUT_GAMEPAD_LEFT_SHOULDER | XINPUT_GAMEPAD_DPAD_DOWN
-XINPUT_NEARBY_INPUTS = {
-    XINPUT_GAMEPAD_DPAD_UP: "up",
-    XINPUT_GAMEPAD_DPAD_DOWN: "down",
-    XINPUT_GAMEPAD_DPAD_LEFT: "left",
-    XINPUT_GAMEPAD_DPAD_RIGHT: "right",
-    XINPUT_GAMEPAD_BACK: "filter",
-    XINPUT_GAMEPAD_A: "toggle",
-    XINPUT_GAMEPAD_B: "close",
-}
-
-class XINPUT_GAMEPAD(ctypes.Structure):
-    _fields_ = [
-        ("wButtons", ctypes.wintypes.WORD),
-        ("bLeftTrigger", ctypes.wintypes.BYTE),
-        ("bRightTrigger", ctypes.wintypes.BYTE),
-        ("sThumbLX", ctypes.wintypes.SHORT),
-        ("sThumbLY", ctypes.wintypes.SHORT),
-        ("sThumbRX", ctypes.wintypes.SHORT),
-        ("sThumbRY", ctypes.wintypes.SHORT),
-    ]
-
-class XINPUT_STATE(ctypes.Structure):
-    _fields_ = [
-        ("dwPacketNumber", ctypes.wintypes.DWORD),
-        ("Gamepad", XINPUT_GAMEPAD),
-    ]
-
-def _load_xinput_get_state():
-    for dll_name in ("xinput1_4.dll", "xinput1_3.dll", "xinput9_1_0.dll"):
-        try:
-            dll = ctypes.WinDLL(dll_name)
-            fn = dll.XInputGetState
-            fn.argtypes = [ctypes.wintypes.DWORD, ctypes.POINTER(XINPUT_STATE)]
-            fn.restype = ctypes.wintypes.DWORD
-            return fn
-        except Exception:
-            continue
-    return None
-
-def _controller_buttons(get_state):
-    if not get_state:
-        return 0
-    state = XINPUT_STATE()
-    buttons = 0
-    for idx in range(4):
-        if get_state(idx, ctypes.byref(state)) == 0:
-            buttons |= state.Gamepad.wButtons
-    return buttons
-
-def _load_hotkey_settings():
-    try:
-        with open(HOTKEY_SETTINGS_FILE, 'r', encoding='utf-8') as f:
-            data = json.load(f)
-        result = {}
-        for hk_id, default in DEFAULT_HOTKEYS.items():
-            saved = data.get(hk_id)
-            if saved and "vk" in saved:
-                result[hk_id] = {
-                    "vk": saved["vk"],
-                    "mod": saved.get("mod", 0),
-                    "enabled": saved.get("enabled", True),
-                }
-            else:
-                result[hk_id] = dict(default)
-        return result
-    except Exception:
-        return {k: dict(v) for k, v in DEFAULT_HOTKEYS.items()}
-
-def _save_hotkey_settings(hotkeys):
-    os.makedirs(SAVE_DIR, exist_ok=True)
-    with open(HOTKEY_SETTINGS_FILE, 'w', encoding='utf-8') as f:
-        json.dump(hotkeys, f, indent=2)
-
-def _nearby_controls_enabled():
-    return os.environ.get('CD_NEARBY_CONTROLS_ENABLED', '0') == '1'
-
-CALIBRATION_FILES = {
-    "pywel": os.path.join(SAVE_DIR, "cd_calibration_pywel.json"),
-    "abyss": os.path.join(SAVE_DIR, "cd_calibration_abyss.json"),
-}
-_LEGACY_CALIBRATION_FILE = os.path.join(SAVE_DIR, "cd_calibration.json")
-
-# ── Calibração ───────────────────────────────────────────────────────
-
-def _load_calibration(realm="pywel"):
-    cal_file = CALIBRATION_FILES[realm]
-    try:
-        with open(cal_file, 'r') as f:
-            cal = json.load(f)
-            if _is_calibration_usable(cal, realm):
-                return cal
-    except Exception:
-        pass
-    if realm == "pywel" and os.path.isfile(_LEGACY_CALIBRATION_FILE):
-        try:
-            with open(_LEGACY_CALIBRATION_FILE, 'r') as f:
-                cal = json.load(f)
-                if _is_calibration_usable(cal, realm):
-                    return cal
-        except Exception:
-            pass
-    return list(DEFAULT_CALIBRATIONS[realm])
-
-
-# ── Waypoints ────────────────────────────────────────────────────────
-
-WAYPOINTS_FILE = os.path.join(SAVE_DIR, "cd_overlay_waypoints.json")
-
-def _load_waypoints():
-    try:
-        with open(WAYPOINTS_FILE, 'r', encoding='utf-8') as f:
-            return json.load(f)
-    except Exception:
-        return []
-
-def _save_waypoints(waypoints):
-    os.makedirs(SAVE_DIR, exist_ok=True)
-    with open(WAYPOINTS_FILE, 'w', encoding='utf-8') as f:
-        json.dump(waypoints, f, indent=2, ensure_ascii=False)
-
-# ── WebSocket server ─────────────────────────────────────────────────
-
-_clients: set = set()
-_client_locks: dict = {}    # websocket → asyncio.Lock (serializa sends)
-_client_options: dict = {}  # websocket -> opcoes negociadas pelo cliente
-_realtime_seq: int = 0
-_latest_realtime_lock = threading.Lock()
-_latest_realtime_frame = None
 _engine: TeleportEngine = None
-_cal_cache: dict = {}
 _last_pos: dict = None          # última posição conhecida
 _pre_teleport_pos: tuple = None # posição antes do último teleport (para abort)
 _default_teleport_y: float = 1000.0  # Y padrão quando marcador não tem altura (atualizado pelo cliente)
 ABYSS_DEFAULT_Y = 2400.0  # Y padrão para teleport no Abyss
 _waypoints: list = _load_waypoints()
-
-def _get_cal(realm):
-    if realm not in _cal_cache:
-        _cal_cache[realm] = _load_calibration(realm)
-    return _cal_cache[realm]
 
 def _effective_marker_y(marker_y: float) -> float:
     """Retorna o Y efetivo para teleport ao marcador do mapa.
@@ -291,82 +154,6 @@ def _effective_marker_y(marker_y: float) -> float:
         return _default_teleport_y
     return marker_y
 
-async def _safe_send(websocket, msg: str):
-    """Send com lock para evitar conflito de sends concorrentes."""
-    lock = _client_locks.get(websocket)
-    if not lock:
-        return
-    async with lock:
-        try:
-            await websocket.send(msg)
-        except Exception:
-            _clients.discard(websocket)
-
-async def _safe_send_many(websocket, messages):
-    """Envia varias mensagens para um cliente sob um unico lock."""
-    lock = _client_locks.get(websocket)
-    if not lock:
-        return
-    async with lock:
-        try:
-            for msg in messages:
-                await websocket.send(msg)
-        except Exception:
-            _clients.discard(websocket)
-
-async def _broadcast_all(msg: str):
-    await asyncio.gather(
-        *(_safe_send(client, msg) for client in set(_clients)),
-        return_exceptions=True,
-    )
-
-def _client_label(client):
-    opts = _client_options.get(client, {})
-    name = opts.get("client_name") or "client"
-    remote = getattr(client, "remote_address", None)
-    return f"{name}@{remote}" if remote else name
-
-def _make_realtime_frame(events: list):
-    global _realtime_seq
-    _realtime_seq += 1
-    sent_at = round(time.time() * 1000.0, 3)
-    return {
-        "type": "realtime",
-        "seq": _realtime_seq,
-        "sentAt": sent_at,
-        "events": events,
-    }
-
-def _publish_latest_realtime(events: list):
-    global _latest_realtime_frame
-    frame = _make_realtime_frame(events)
-    with _latest_realtime_lock:
-        _latest_realtime_frame = frame
-    return frame
-
-def get_latest_realtime_frame():
-    with _latest_realtime_lock:
-        return _latest_realtime_frame
-
-async def _broadcast_realtime(events: list):
-    """Envia eventos frequentes. Clientes opt-in recebem 1 frame WebSocket por tick."""
-    if not events:
-        return
-    frame = _publish_latest_realtime(events)
-    bundled_msg = json.dumps(frame)
-    individual_msgs = [json.dumps(event) for event in events]
-    tasks = []
-    for client in set(_clients):
-        opts = _client_options.get(client, {})
-        if opts.get("native_realtime"):
-            continue
-        if opts.get("realtime_bundle"):
-            tasks.append(_safe_send(client, bundled_msg))
-        else:
-            tasks.append(_safe_send_many(client, individual_msgs))
-    if tasks:
-        await asyncio.gather(*tasks, return_exceptions=True)
-
 async def _send_waypoints(websocket=None):
     """Envia lista de waypoints. Se websocket=None, broadcast para todos."""
     msg = json.dumps({"type": "waypoints", "data": _waypoints})
@@ -374,12 +161,6 @@ async def _send_waypoints(websocket=None):
         await _safe_send(websocket, msg)
     else:
         await _broadcast_all(msg)
-
-def _save_calibration(realm: str, cal: list):
-    os.makedirs(SAVE_DIR, exist_ok=True)
-    with open(CALIBRATION_FILES[realm], 'w', encoding='utf-8') as f:
-        json.dump(cal, f, indent=2)
-    _cal_cache.pop(realm, None)
 
 async def _handle_client(websocket):
     global _waypoints, _pre_teleport_pos, _default_teleport_y
