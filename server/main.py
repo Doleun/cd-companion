@@ -117,7 +117,7 @@ from server.hotkeys import (
     XINPUT_GAMEPAD_BACK, XINPUT_GAMEPAD_LEFT_SHOULDER,
     XINPUT_GAMEPAD_A, XINPUT_GAMEPAD_B,
     XINPUT_OPEN_NEARBY_MASK, XINPUT_NEARBY_INPUTS,
-    XINPUT_WAYPOINT_INPUTS,
+    XINPUT_WAYPOINT_INPUTS, XINPUT_FOCUS_TOGGLE_MASK,
     XINPUT_GAMEPAD, XINPUT_STATE,
     _load_xinput_get_state, _controller_buttons,
     _load_hotkey_settings, _save_hotkey_settings,
@@ -493,6 +493,7 @@ def _hotkey_thread():
     controller_button_state = {}
     controller_open_waypoints_pressed = False
     controller_wp_button_state = {}
+    controller_focus_toggle_pressed = False
 
     def _display(hk):
         vk = hk["vk"]
@@ -574,6 +575,14 @@ def _hotkey_thread():
         else:
             controller_wp_button_state.clear()
 
+        # -- Controle Xbox - focus toggle
+        focus_mask = controller_hotkeys.get("focus_toggle", XINPUT_FOCUS_TOGGLE_MASK)
+        focus_pressed = focus_mask and bool((controller_buttons & focus_mask) == focus_mask)
+        if focus_pressed and not controller_focus_toggle_pressed and _hotkey_loop and not _controller_hotkey_paused:
+            _hotkey_loop.call_soon_threadsafe(
+                asyncio.ensure_future, _hotkey_focus_toggle())
+        controller_focus_toggle_pressed = focus_pressed
+
         for hk_id, cfg in hotkeys.items():
             if not cfg["enabled"]:
                 key_state[hk_id] = False
@@ -612,6 +621,9 @@ def _hotkey_thread():
                     elif hk_id == "open_waypoints":
                         _hotkey_loop.call_soon_threadsafe(
                             asyncio.ensure_future, _hotkey_open_waypoints())
+                    elif hk_id == "focus_toggle":
+                        _hotkey_loop.call_soon_threadsafe(
+                            asyncio.ensure_future, _hotkey_focus_toggle())
 
             key_state[hk_id] = pressed
 
@@ -668,6 +680,17 @@ async def _hotkey_open_waypoints():
 async def _hotkey_waypoint_input(action: str):
     """Sends navigation command from the controller to the waypoints panel."""
     await _broadcast_all(json.dumps({"type": "waypoint_input_wp", "action": action}))
+
+_focus_toggle_cb = None
+
+def set_focus_toggle_callback(cb):
+    global _focus_toggle_cb
+    _focus_toggle_cb = cb
+
+async def _hotkey_focus_toggle():
+    """Toggles focus between the game and the overlay."""
+    if _focus_toggle_cb:
+        _focus_toggle_cb()
 
 async def _broadcast_loop():
     global _engine, _last_pos

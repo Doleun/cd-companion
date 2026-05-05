@@ -12,6 +12,7 @@ DEFAULT_HOTKEYS = {
     "abort":           {"vk": 0x74, "mod": 0x10,  "enabled": True},   # Shift+F5
     "open_nearby":     {"vk": 0x4E, "mod": 0x10,  "enabled": True},   # Shift+N
     "open_waypoints":  {"vk": 0x59, "mod": 0x10,  "enabled": True},   # Shift+Y
+    "focus_toggle":    {"vk": 0x46, "mod": 0x10,  "enabled": True},   # Shift+F
 }
 
 VK_NAMES = {
@@ -19,6 +20,7 @@ VK_NAMES = {
     0x76: "F7", 0x77: "F8", 0x78: "F9", 0x79: "F10", 0x7A: "F11", 0x7B: "F12",
     0x4E: "N",
     0x59: "Y",
+    0x46: "F",
 }
 VK_MOD_SHIFT = 0x10
 VK_MOD_CTRL  = 0x11
@@ -31,6 +33,7 @@ XINPUT_GAMEPAD_DPAD_LEFT  = 0x0004
 XINPUT_GAMEPAD_DPAD_RIGHT = 0x0008
 XINPUT_GAMEPAD_BACK       = 0x0020
 XINPUT_GAMEPAD_LEFT_SHOULDER = 0x0100
+XINPUT_GAMEPAD_RIGHT_SHOULDER = 0x0200
 XINPUT_GAMEPAD_A          = 0x1000
 XINPUT_GAMEPAD_B          = 0x2000
 XINPUT_GAMEPAD_Y          = 0x8000
@@ -62,6 +65,7 @@ XINPUT_BUTTON_NAMES = {
     XINPUT_GAMEPAD_DPAD_RIGHT:    "DPad Right",
     XINPUT_GAMEPAD_BACK:          "Back",
     XINPUT_GAMEPAD_LEFT_SHOULDER: "LB",
+    XINPUT_GAMEPAD_RIGHT_SHOULDER: "RB",
     XINPUT_GAMEPAD_A:             "A",
     XINPUT_GAMEPAD_B:             "B",
     XINPUT_GAMEPAD_Y:             "Y",
@@ -69,9 +73,12 @@ XINPUT_BUTTON_NAMES = {
 
 CONTROLLER_HOTKEYS_FILE = os.path.join(SAVE_DIR, "cd_controller_hotkeys.json")
 
+XINPUT_FOCUS_TOGGLE_MASK = XINPUT_GAMEPAD_LEFT_SHOULDER | XINPUT_GAMEPAD_RIGHT_SHOULDER
+
 DEFAULT_CONTROLLER_HOTKEYS = {
     "open_waypoints": XINPUT_OPEN_WAYPOINTS_MASK,
     "open_nearby": XINPUT_OPEN_NEARBY_MASK,
+    "focus_toggle": XINPUT_FOCUS_TOGGLE_MASK,
 }
 
 

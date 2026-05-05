@@ -160,9 +160,11 @@ from overlay.widgets import (
 try:
     from server.main import (
         set_waypoints_focus_callbacks as _set_waypoints_focus_callbacks,
+        set_focus_toggle_callback as _set_focus_toggle_callback,
     )
 except Exception:
     _set_waypoints_focus_callbacks = None
+    _set_focus_toggle_callback = None
 
 # ── Janela principal ──────────────────────────────────────────────────
 
@@ -297,6 +299,9 @@ class OverlayWindow(QMainWindow):
                 self._activate_for_waypoints,
                 focus_game_window,
             )
+
+        if _set_focus_toggle_callback:
+            _set_focus_toggle_callback(self._toggle_focus)
 
     # ── Rounded corners ────────────────────────────────────────────────
     CORNER_RADIUS = 8
@@ -630,6 +635,20 @@ class OverlayWindow(QMainWindow):
             self.show()
             self.raise_()
             self.activateWindow()
+
+    def _toggle_focus(self):
+        """Alterna foco entre o jogo e o overlay (foca o WebView do MapGenie)."""
+        user32 = ctypes.windll.user32
+        user32.GetForegroundWindow.restype = ctypes.wintypes.HWND
+        fg_hwnd = user32.GetForegroundWindow()
+        overlay_hwnd = int(self.winId())
+        # Se o overlay já está em foreground, devolve foco ao jogo
+        if int(fg_hwnd) == overlay_hwnd:
+            focus_game_window()
+        else:
+            # Traz o overlay para frente e foca o WebView
+            self._activate_for_waypoints()
+            self._view.setFocus()
 
     def _activate_for_waypoints(self):
         """Traz o overlay para frente quando o painel de waypoints abre."""
