@@ -24,7 +24,7 @@ import threading
 from PyQt5.QtCore import Qt, QUrl, QTimer, pyqtSignal, QObject
 from PyQt5.QtWidgets import QApplication
 from PyQt5.QtGui import QCursor
-from PyQt5.QtGui import QBitmap, QPainter
+from PyQt5.QtGui import QBitmap, QPainter, QColor, QPen
 from PyQt5.QtWidgets import (QApplication, QMainWindow, QWidget,
                              QDialog, QVBoxLayout, QHBoxLayout,
                              QLabel, QCheckBox, QPushButton, QSlider)
@@ -166,6 +166,41 @@ except Exception:
     _set_waypoints_focus_callbacks = None
     _set_focus_toggle_callback = None
 
+# ── Resize ring overlay (modo circular) ──────────────────────────────
+
+class _ResizeRingOverlay(QWidget):
+    """Anel visual que aparece ao passar o mouse na borda redimensionável."""
+
+    def __init__(self, parent, border):
+        super().__init__(parent)
+        self._active = False
+        self._border = border
+        self.setAttribute(Qt.WA_TransparentForMouseEvents)
+        self.setAttribute(Qt.WA_NoSystemBackground)
+        self.setAutoFillBackground(False)
+
+    def set_active(self, active):
+        if active != self._active:
+            self._active = active
+            self.update()
+
+    def paintEvent(self, _event):
+        if not self._active:
+            return
+        p = QPainter(self)
+        p.setRenderHint(QPainter.Antialiasing)
+        b = self._border
+        w, h = self.width(), self.height()
+        pen = QPen(QColor(160, 200, 255, 110))
+        pen.setWidth(b)
+        p.setPen(pen)
+        p.setBrush(Qt.NoBrush)
+        # pen é centralizado na borda do ellipse; inset por b//2 para não sair da máscara
+        half = b // 2
+        p.drawEllipse(half, half, w - b, h - b)
+        p.end()
+
+
 # ── Janela principal ──────────────────────────────────────────────────
 
 class OverlayWindow(QMainWindow):
@@ -238,6 +273,11 @@ class OverlayWindow(QMainWindow):
 
         # ── Botões flutuantes individuais (modo circular) ──────────────
         self._create_float_btns(root)
+
+        # ── Anel de redimensionamento (modo circular) ──────────────────
+        self._resize_ring = _ResizeRingOverlay(root, self._BORDER)
+        self._resize_ring.setGeometry(0, 0, w, h)
+        self._resize_ring.raise_()
 
         # Aplica máscara e posiciona barra
         self._apply_mask()
@@ -324,10 +364,14 @@ class OverlayWindow(QMainWindow):
 
     def resizeEvent(self, event):
         super().resizeEvent(event)
-        self._view.setGeometry(0, 0, self.width(), self.height())
+        w, h = self.width(), self.height()
+        self._view.setGeometry(0, 0, w, h)
         self._apply_mask()
         self._update_bar_geometry()
         self._update_float_btn_geometry()
+        if hasattr(self, '_resize_ring'):
+            self._resize_ring.setGeometry(0, 0, w, h)
+            self._resize_ring.raise_()
         if hasattr(self, '_resize_save_timer'):
             self._resize_save_timer.start()
 
@@ -382,6 +426,7 @@ class OverlayWindow(QMainWindow):
         w    = rect.width()
 
         if self._round_window:
+            h = rect.height()
             # Botões flutuantes individuais: mostra no canto superior direito
             near = (0 <= lx <= w and 0 <= ly <= 50)
             if not self._float_btns_visible and near:
@@ -393,6 +438,12 @@ class OverlayWindow(QMainWindow):
                 for btn in self._float_btns:
                     btn.hide()
                 self._float_btns_visible = False
+            # Anel de redimensionamento: cursor na faixa de borda
+            b = self._BORDER
+            inside = 0 <= lx <= w and 0 <= ly <= h
+            in_resize = inside and (lx < b or lx > w - b or ly < b or ly > h - b)
+            if hasattr(self, '_resize_ring'):
+                self._resize_ring.set_active(in_resize)
             return
 
         inside_w = 0 <= lx <= w

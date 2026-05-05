@@ -1,3 +1,8 @@
+## v0.09.00
+
+### Added
+- Circular window mode now shows a subtle highlight ring around the edge when the cursor hovers over the resize area, making the draggable border easier to find.
+
 ## v0.08.00
 
 ### Added
