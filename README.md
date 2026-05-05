@@ -9,6 +9,11 @@ a marker on the map as you move.
 Use the map on a second monitor or separate window without the overlay.
 Download from the [cd-companion-chrome](https://github.com/leandrodiogenes/cd-companion-chrome/releases/latest) releases page.
 
+### Android App
+
+Use your phone or tablet as a second screen — the map with your live position, connected to the companion over Wi-Fi.
+Download the APK from the [cd-companion-apk](https://github.com/leandrodiogenes/cd-companion-apk/releases/latest) releases page.
+
 ---
 
 ## Architecture
