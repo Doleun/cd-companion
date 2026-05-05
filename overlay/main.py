@@ -571,6 +571,9 @@ class OverlayWindow(QMainWindow):
                 self._follow_timer.stop()
             save_config(cfg)
             self._apply_settings_js(new_settings)
+            # Aplica zoom do navegador
+            zoom = new_settings.get('browserZoom', 100)
+            self._view.setZoomFactor(zoom / 100.0)
 
     def _apply_settings_js(self, settings):
         # Só atualiza a variável — os auto-hides de painel só devem rodar
@@ -590,6 +593,8 @@ class OverlayWindow(QMainWindow):
             self._native_realtime_enabled = (
                 settings.get('realtimeTransport') == 'native')
             self._last_native_realtime_seq = None
+            zoom = settings.get('browserZoom', 100)
+            self._view.setZoomFactor(zoom / 100.0)
             self._view.page().runJavaScript(
                 f'window.__cdSettings = {json.dumps(settings)};'
                 f'window.__cdNativeRealtimeEnabled = '
