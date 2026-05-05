@@ -7,6 +7,7 @@
 - Nearby popup: "Stay in list" toggle that keeps focus in the current found/unfound list after marking a location, instead of following the item to the other list.
 - Settings dialog reorganized into tabbed layout (Map, Window, Teleport, Nearby, Waypoints, Direction, Performance).
 - All hotkey and controller combo inputs now have a Clear button to disable the binding.
+- Configurable browser zoom level (70–150%) in Settings > Window, applied on page load and on save.
 
 ### Fixed
 - Closing the waypoints popup with controller B no longer triggers the B action in Crimson Desert (delayed focus return to game window).
