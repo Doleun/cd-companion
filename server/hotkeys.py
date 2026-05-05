@@ -12,7 +12,7 @@ DEFAULT_HOTKEYS = {
     "abort":           {"vk": 0x74, "mod": 0x10,  "enabled": True},   # Shift+F5
     "open_nearby":     {"vk": 0x4E, "mod": 0x10,  "enabled": True},   # Shift+N
     "open_waypoints":  {"vk": 0x59, "mod": 0x10,  "enabled": True},   # Shift+Y
-    "focus_toggle":    {"vk": 0x46, "mod": 0x10,  "enabled": True},   # Shift+F
+    "focus_toggle":    {"vk": 0,    "mod": 0,     "enabled": False},  # disabled by default
 }
 
 VK_NAMES = {
@@ -73,7 +73,7 @@ XINPUT_BUTTON_NAMES = {
 
 CONTROLLER_HOTKEYS_FILE = os.path.join(SAVE_DIR, "cd_controller_hotkeys.json")
 
-XINPUT_FOCUS_TOGGLE_MASK = XINPUT_GAMEPAD_LEFT_SHOULDER | XINPUT_GAMEPAD_RIGHT_SHOULDER
+XINPUT_FOCUS_TOGGLE_MASK = 0  # disabled by default
 
 DEFAULT_CONTROLLER_HOTKEYS = {
     "open_waypoints": XINPUT_OPEN_WAYPOINTS_MASK,

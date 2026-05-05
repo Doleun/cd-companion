@@ -410,8 +410,8 @@ class SettingsDialog(QDialog):
         self._focus_toggle_hk.focusInEvent = _ft_hk_focus_in
         self._focus_toggle_hk.focusOutEvent = _ft_hk_focus_out
 
-        ft_hk_vk = 0x46
-        ft_hk_mod = 0x10
+        ft_hk_vk = 0
+        ft_hk_mod = 0
         try:
             with open(_HOTKEY_SETTINGS_FILE, 'r', encoding='utf-8') as _f:
                 _ft_hk_data = json.load(_f).get('focus_toggle', {})
@@ -419,7 +419,8 @@ class SettingsDialog(QDialog):
                 ft_hk_mod = _ft_hk_data.get('mod', ft_hk_mod)
         except Exception:
             pass
-        self._focus_toggle_hk.setKeySequence(QKeySequence(_vk_to_seq_str(ft_hk_vk, ft_hk_mod)))
+        if ft_hk_vk:
+            self._focus_toggle_hk.setKeySequence(QKeySequence(_vk_to_seq_str(ft_hk_vk, ft_hk_mod)))
         ft_hk_row = QWidget()
         ft_hk_row_layout = QHBoxLayout(ft_hk_row)
         ft_hk_row_layout.setContentsMargins(0, 0, 0, 0)
