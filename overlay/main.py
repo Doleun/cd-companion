@@ -597,17 +597,19 @@ class OverlayWindow(QMainWindow):
                     self._bar.hide()
                     self._bar_visible = False
             if self._round_window and not was_round:
-                # Indo para circular: salva geometria atual antes do resize
+                # Indo para circular: salva geometria quadrada e restaura tamanho circular
                 cfg['squareWidth'] = self.width()
                 cfg['squareHeight'] = self.height()
                 self._bar.hide()
                 self._bar_visible = False
-                self.resize(240, 240)   # resizeEvent aplica máscara e barra
+                round_size = cfg.get('roundWidth', 240)
+                self.resize(round_size, round_size)
             else:
                 self._apply_mask()
                 self._update_bar_geometry()
             if not self._round_window and was_round:
-                # Saindo do modo circular: restaura geometria quadrada
+                # Saindo do modo circular: salva tamanho circular e restaura quadrado
+                cfg['roundWidth'] = self.width()
                 square_w = cfg.get('squareWidth', DEFAULT_W)
                 square_h = cfg.get('squareHeight', DEFAULT_H)
                 self.resize(square_w, square_h)
