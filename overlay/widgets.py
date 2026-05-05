@@ -367,6 +367,167 @@ class SettingsDialog(QDialog):
         slider_block('Browser zoom', zoom_val, self._zoom_slider,
                      'Zoom level of the map page. Applied immediately on save.')
 
+        # Focus toggle hotkey
+        section('Focus toggle', win_layout)
+        ft_hk_lbl = QLabel('Keyboard hotkey')
+        self._focus_toggle_hk = QKeySequenceEdit()
+        self._focus_toggle_hk.setFixedHeight(32)
+        self._focus_toggle_hk.setAttribute(Qt.WA_StyledBackground, True)
+        self._focus_toggle_hk.setStyleSheet(
+            "QKeySequenceEdit{background:#e2e8f0;color:#111827;"
+            "border:1px solid #64748b;border-radius:6px;padding:4px 8px;"
+            "selection-background-color:#ffd060;selection-color:#111827;}"
+            "QKeySequenceEdit:focus{border:1px solid #ffd060;}")
+        ft_hk_line = self._focus_toggle_hk.findChild(QLineEdit)
+        if ft_hk_line:
+            ft_hk_line.setStyleSheet(
+                "QLineEdit{background:#e2e8f0;color:#111827;border:none;"
+                "selection-background-color:#ffd060;selection-color:#111827;}")
+        self._focus_toggle_hk.setToolTip('Restart overlay for the new hotkey to take effect')
+        self._focus_toggle_hk._hk_finalized = False
+
+        def _ft_on_seq_changed(seq):
+            first = seq.toString().split(', ')[0]
+            if first != seq.toString():
+                self._focus_toggle_hk.setKeySequence(QKeySequence(first))
+            self._focus_toggle_hk._hk_finalized = True
+
+        def _ft_hk_key_press(e):
+            if self._focus_toggle_hk._hk_finalized:
+                self._focus_toggle_hk.clear()
+                self._focus_toggle_hk._hk_finalized = False
+            QKeySequenceEdit.keyPressEvent(self._focus_toggle_hk, e)
+
+        self._focus_toggle_hk.keySequenceChanged.connect(_ft_on_seq_changed)
+        self._focus_toggle_hk.keyPressEvent = _ft_hk_key_press
+
+        def _ft_hk_focus_in(e):
+            if _set_nearby_hotkey_paused: _set_nearby_hotkey_paused(True)
+            QKeySequenceEdit.focusInEvent(self._focus_toggle_hk, e)
+        def _ft_hk_focus_out(e):
+            if _set_nearby_hotkey_paused: _set_nearby_hotkey_paused(False)
+            QKeySequenceEdit.focusOutEvent(self._focus_toggle_hk, e)
+        self._focus_toggle_hk.focusInEvent = _ft_hk_focus_in
+        self._focus_toggle_hk.focusOutEvent = _ft_hk_focus_out
+
+        ft_hk_vk = 0
+        ft_hk_mod = 0
+        try:
+            with open(_HOTKEY_SETTINGS_FILE, 'r', encoding='utf-8') as _f:
+                _ft_hk_data = json.load(_f).get('focus_toggle', {})
+                ft_hk_vk = _ft_hk_data.get('vk', ft_hk_vk)
+                ft_hk_mod = _ft_hk_data.get('mod', ft_hk_mod)
+        except Exception:
+            pass
+        if ft_hk_vk:
+            self._focus_toggle_hk.setKeySequence(QKeySequence(_vk_to_seq_str(ft_hk_vk, ft_hk_mod)))
+        ft_hk_row = QWidget()
+        ft_hk_row_layout = QHBoxLayout(ft_hk_row)
+        ft_hk_row_layout.setContentsMargins(0, 0, 0, 0)
+        ft_hk_row_layout.setSpacing(6)
+        ft_hk_row_layout.addWidget(self._focus_toggle_hk)
+        ft_hk_clear_btn = QPushButton('Clear')
+        ft_hk_clear_btn.setFixedHeight(32)
+        ft_hk_clear_btn.setStyleSheet(
+            "QPushButton{background:rgba(255,80,80,.15);border:1px solid rgba(255,80,80,.4);"
+            "color:#ff6060;border-radius:6px;padding:0 10px;font:11px 'Segoe UI';}"
+            "QPushButton:hover{background:rgba(255,80,80,.3);}")
+        ft_hk_clear_btn.clicked.connect(lambda: self._focus_toggle_hk.clear())
+        ft_hk_row_layout.addWidget(ft_hk_clear_btn)
+        active_layout[0].addWidget(ft_hk_lbl)
+        active_layout[0].addWidget(ft_hk_row)
+
+        # Focus toggle controller combo
+        if _HAS_CONTROLLER_HOTKEYS:
+            active_layout[0].addWidget(QLabel('Controller combo'))
+            ft_ctrl_row = QWidget()
+            ft_ctrl_row_layout = QHBoxLayout(ft_ctrl_row)
+            ft_ctrl_row_layout.setContentsMargins(0, 0, 0, 0)
+            ft_ctrl_row_layout.setSpacing(6)
+            _ft_ctrl_settings = _load_controller_hotkey_settings()
+            _ft_ctrl_mask = _ft_ctrl_settings.get("focus_toggle", 0x0300)
+            self._ft_ctrl_display = QLineEdit(mask_to_name(_ft_ctrl_mask))
+            self._ft_ctrl_display.setReadOnly(True)
+            self._ft_ctrl_display.setFixedHeight(32)
+            self._ft_ctrl_display.setStyleSheet(
+                "QLineEdit{background:#e2e8f0;color:#111827;border:1px solid #64748b;"
+                "border-radius:6px;padding:4px 8px;}")
+            self._ft_ctrl_record_btn = QPushButton('Record')
+            self._ft_ctrl_record_btn.setFixedHeight(32)
+            self._ft_ctrl_record_btn.setStyleSheet(
+                "QPushButton{background:rgba(255,208,96,.18);"
+                "border:1px solid rgba(255,208,96,.5);"
+                "color:#ffd060;border-radius:6px;padding:0 10px;}"
+                "QPushButton:hover{background:rgba(255,208,96,.3);}"
+                "QPushButton:disabled{color:#666;border-color:#444;background:#222;}")
+            _ft_ctrl_clear_btn = QPushButton('Clear')
+            _ft_ctrl_clear_btn.setFixedHeight(32)
+            _ft_ctrl_clear_btn.setStyleSheet(
+                "QPushButton{background:rgba(255,80,80,.15);border:1px solid rgba(255,80,80,.4);"
+                "color:#ff6060;border-radius:6px;padding:0 10px;font:11px 'Segoe UI';}"
+                "QPushButton:hover{background:rgba(255,80,80,.3);}")
+
+            def _ft_ctrl_clear():
+                self._ft_ctrl_display.setText('None')
+                try:
+                    existing = _load_controller_hotkey_settings()
+                    existing["focus_toggle"] = 0
+                    _save_controller_hotkey_settings(existing)
+                except Exception:
+                    pass
+
+            _ft_ctrl_clear_btn.clicked.connect(_ft_ctrl_clear)
+            ft_ctrl_row_layout.addWidget(self._ft_ctrl_display)
+            ft_ctrl_row_layout.addWidget(self._ft_ctrl_record_btn)
+            ft_ctrl_row_layout.addWidget(_ft_ctrl_clear_btn)
+            active_layout[0].addWidget(ft_ctrl_row)
+
+            ft_note = QLabel('Toggles focus between Crimson Desert and the overlay map. Restart required.')
+            ft_note.setWordWrap(True)
+            ft_note.setStyleSheet('color:#64748b; font:11px "Segoe UI"; margin-top:-4px;')
+            active_layout[0].addWidget(ft_note)
+
+            self._ft_ctrl_recording = False
+            self._ft_ctrl_peak_mask = 0
+            self._ft_ctrl_timer = QTimer()
+            self._ft_ctrl_timer.setInterval(50)
+            _ft_get_xinput = _load_xinput_get_state()
+
+            def _ft_ctrl_poll():
+                btns = _controller_buttons(_ft_get_xinput)
+                self._ft_ctrl_peak_mask |= btns
+                if self._ft_ctrl_peak_mask and btns == 0:
+                    saved_mask = self._ft_ctrl_peak_mask
+                    self._ft_ctrl_timer.stop()
+                    self._ft_ctrl_recording = False
+                    self._ft_ctrl_record_btn.setText('Record')
+                    self._ft_ctrl_record_btn.setEnabled(True)
+                    self._ft_ctrl_display.setText(mask_to_name(saved_mask))
+                    if _set_controller_hotkey_paused:
+                        _set_controller_hotkey_paused(False)
+                    try:
+                        existing = _load_controller_hotkey_settings()
+                        existing["focus_toggle"] = saved_mask
+                        _save_controller_hotkey_settings(existing)
+                    except Exception:
+                        pass
+
+            self._ft_ctrl_timer.timeout.connect(_ft_ctrl_poll)
+
+            def _ft_start_record():
+                if self._ft_ctrl_recording:
+                    return
+                self._ft_ctrl_recording = True
+                self._ft_ctrl_peak_mask = 0
+                self._ft_ctrl_display.setFocus()
+                self._ft_ctrl_record_btn.setText('Recording...')
+                self._ft_ctrl_record_btn.setEnabled(False)
+                if _set_controller_hotkey_paused:
+                    _set_controller_hotkey_paused(True)
+                self._ft_ctrl_timer.start()
+
+            self._ft_ctrl_record_btn.clicked.connect(_ft_start_record)
+
         win_layout.addStretch(1)
 
         # ══════════════════════════════════════════════════════════════
@@ -910,6 +1071,8 @@ class SettingsDialog(QDialog):
         parsed = _seq_str_to_vk(seq_str)
         wp_seq_str = self._waypoints_hk.keySequence().toString()
         wp_parsed = _seq_str_to_vk(wp_seq_str)
+        ft_seq_str = self._focus_toggle_hk.keySequence().toString()
+        ft_parsed = _seq_str_to_vk(ft_seq_str)
         try:
             try:
                 with open(_HOTKEY_SETTINGS_FILE, 'r', encoding='utf-8') as f:
@@ -926,6 +1089,11 @@ class SettingsDialog(QDialog):
                 data['open_waypoints'] = {'vk': wp_vk, 'mod': wp_mod, 'enabled': True}
             else:
                 data['open_waypoints'] = {'vk': 0, 'mod': 0, 'enabled': False}
+            if ft_parsed is not None:
+                ft_vk, ft_mod = ft_parsed
+                data['focus_toggle'] = {'vk': ft_vk, 'mod': ft_mod, 'enabled': True}
+            else:
+                data['focus_toggle'] = {'vk': 0, 'mod': 0, 'enabled': False}
             os.makedirs(os.path.dirname(_HOTKEY_SETTINGS_FILE), exist_ok=True)
             with open(_HOTKEY_SETTINGS_FILE, 'w', encoding='utf-8') as f:
                 json.dump(data, f, indent=2)

@@ -1,3 +1,8 @@
+## v0.08.00
+
+### Added
+- Focus toggle: configurable keyboard hotkey and controller combo to switch focus between Crimson Desert and the overlay map (disabled by default, set up in Settings > Window).
+
 ## v0.07.00
 
 ### Added
