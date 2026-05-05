@@ -193,7 +193,7 @@ class SettingsDialog(QDialog):
         self.setWindowFlags(self.windowFlags() | Qt.WindowStaysOnTopHint)
         self.setStyleSheet(SETTINGS_STYLE)
         self.setMinimumWidth(840)
-        self.resize(840, 495)
+        self.resize(840, 615)
         self._cfg = cfg
         self._original_opacity = parent.windowOpacity() if parent else 1.0
 
@@ -473,11 +473,117 @@ class SettingsDialog(QDialog):
         except Exception:
             pass
         self._nearby_hk.setKeySequence(QKeySequence(_vk_to_seq_str(hk_vk, hk_mod)))
+        nb_hk_row = QWidget()
+        nb_hk_row_layout = QHBoxLayout(nb_hk_row)
+        nb_hk_row_layout.setContentsMargins(0, 0, 0, 0)
+        nb_hk_row_layout.setSpacing(6)
+        nb_hk_row_layout.addWidget(self._nearby_hk)
+        nb_hk_clear_btn = QPushButton('Clear')
+        nb_hk_clear_btn.setFixedHeight(32)
+        nb_hk_clear_btn.setStyleSheet(
+            "QPushButton{background:rgba(255,80,80,.15);border:1px solid rgba(255,80,80,.4);"
+            "color:#ff6060;border-radius:6px;padding:0 10px;font:11px 'Segoe UI';}"
+            "QPushButton:hover{background:rgba(255,80,80,.3);}")
+        nb_hk_clear_btn.clicked.connect(lambda: self._nearby_hk.clear())
+        nb_hk_row_layout.addWidget(nb_hk_clear_btn)
         active_layout[0].addWidget(hk_lbl)
-        active_layout[0].addWidget(self._nearby_hk)
+        active_layout[0].addWidget(nb_hk_row)
         hk_note = QLabel('Restart required to apply hotkey change.')
         hk_note.setStyleSheet('color:#64748b; font:11px "Segoe UI"; margin-top:-4px;')
         active_layout[0].addWidget(hk_note)
+
+        # Nearby controller combo
+        if _HAS_CONTROLLER_HOTKEYS:
+            section('Controller', nb_layout)
+            active_layout[0].addWidget(QLabel('Open combo'))
+            nb_ctrl_row = QWidget()
+            nb_ctrl_row_layout = QHBoxLayout(nb_ctrl_row)
+            nb_ctrl_row_layout.setContentsMargins(0, 0, 0, 0)
+            nb_ctrl_row_layout.setSpacing(6)
+            _nb_ctrl_settings = _load_controller_hotkey_settings()
+            _nb_ctrl_mask = _nb_ctrl_settings.get("open_nearby", 0x0102)
+            self._nb_ctrl_display = QLineEdit(mask_to_name(_nb_ctrl_mask))
+            self._nb_ctrl_display.setReadOnly(True)
+            self._nb_ctrl_display.setFixedHeight(32)
+            self._nb_ctrl_display.setStyleSheet(
+                "QLineEdit{background:#e2e8f0;color:#111827;border:1px solid #64748b;"
+                "border-radius:6px;padding:4px 8px;}")
+            self._nb_ctrl_record_btn = QPushButton('Record')
+            self._nb_ctrl_record_btn.setFixedHeight(32)
+            self._nb_ctrl_record_btn.setStyleSheet(
+                "QPushButton{background:rgba(255,208,96,.18);"
+                "border:1px solid rgba(255,208,96,.5);"
+                "color:#ffd060;border-radius:6px;padding:0 10px;}"
+                "QPushButton:hover{background:rgba(255,208,96,.3);}"
+                "QPushButton:disabled{color:#666;border-color:#444;background:#222;}")
+            nb_ctrl_row_layout.addWidget(self._nb_ctrl_display)
+            nb_ctrl_row_layout.addWidget(self._nb_ctrl_record_btn)
+            _nb_ctrl_clear_btn = QPushButton('Clear')
+            _nb_ctrl_clear_btn.setFixedHeight(32)
+            _nb_ctrl_clear_btn.setStyleSheet(
+                "QPushButton{background:rgba(255,80,80,.15);border:1px solid rgba(255,80,80,.4);"
+                "color:#ff6060;border-radius:6px;padding:0 10px;font:11px 'Segoe UI';}"
+                "QPushButton:hover{background:rgba(255,80,80,.3);}")
+
+            def _nb_ctrl_clear():
+                self._nb_ctrl_display.setText('None')
+                try:
+                    existing = _load_controller_hotkey_settings()
+                    existing["open_nearby"] = 0
+                    _save_controller_hotkey_settings(existing)
+                except Exception:
+                    pass
+
+            _nb_ctrl_clear_btn.clicked.connect(_nb_ctrl_clear)
+            nb_ctrl_row_layout.addWidget(_nb_ctrl_clear_btn)
+            active_layout[0].addWidget(nb_ctrl_row)
+            nb_ctrl_note = QLabel(
+                'Hold button combo on controller, then release. Restart required.')
+            nb_ctrl_note.setWordWrap(True)
+            nb_ctrl_note.setStyleSheet(
+                'color:#64748b; font:11px "Segoe UI"; margin-top:-4px;')
+            active_layout[0].addWidget(nb_ctrl_note)
+
+            self._nb_ctrl_recording = False
+            self._nb_ctrl_peak_mask = 0
+            self._nb_ctrl_timer = QTimer()
+            self._nb_ctrl_timer.setInterval(50)
+            _nb_get_xinput = _load_xinput_get_state()
+
+            def _nb_ctrl_poll():
+                btns = _controller_buttons(_nb_get_xinput)
+                self._nb_ctrl_peak_mask |= btns
+                if self._nb_ctrl_peak_mask and btns == 0:
+                    saved_mask = self._nb_ctrl_peak_mask
+                    self._nb_ctrl_timer.stop()
+                    self._nb_ctrl_recording = False
+                    self._nb_ctrl_record_btn.setText('Record')
+                    self._nb_ctrl_record_btn.setEnabled(True)
+                    self._nb_ctrl_display.setText(mask_to_name(saved_mask))
+                    if _set_controller_hotkey_paused:
+                        _set_controller_hotkey_paused(False)
+                    try:
+                        existing = _load_controller_hotkey_settings()
+                        existing["open_nearby"] = saved_mask
+                        _save_controller_hotkey_settings(existing)
+                    except Exception:
+                        pass
+
+            self._nb_ctrl_timer.timeout.connect(_nb_ctrl_poll)
+
+            def _nb_start_record():
+                if self._nb_ctrl_recording:
+                    return
+                self._nb_ctrl_recording = True
+                self._nb_ctrl_peak_mask = 0
+                self._nb_ctrl_display.setFocus()
+                self._nb_ctrl_record_btn.setText('Recording...')
+                self._nb_ctrl_record_btn.setEnabled(False)
+                if _set_controller_hotkey_paused:
+                    _set_controller_hotkey_paused(True)
+                self._nb_ctrl_timer.start()
+
+            self._nb_ctrl_record_btn.clicked.connect(_nb_start_record)
 
         nb_layout.addStretch(1)
 
@@ -538,8 +644,21 @@ class SettingsDialog(QDialog):
         except Exception:
             pass
         self._waypoints_hk.setKeySequence(QKeySequence(_vk_to_seq_str(wp_hk_vk, wp_hk_mod)))
+        wp_hk_row = QWidget()
+        wp_hk_row_layout = QHBoxLayout(wp_hk_row)
+        wp_hk_row_layout.setContentsMargins(0, 0, 0, 0)
+        wp_hk_row_layout.setSpacing(6)
+        wp_hk_row_layout.addWidget(self._waypoints_hk)
+        wp_hk_clear_btn = QPushButton('Clear')
+        wp_hk_clear_btn.setFixedHeight(32)
+        wp_hk_clear_btn.setStyleSheet(
+            "QPushButton{background:rgba(255,80,80,.15);border:1px solid rgba(255,80,80,.4);"
+            "color:#ff6060;border-radius:6px;padding:0 10px;font:11px 'Segoe UI';}"
+            "QPushButton:hover{background:rgba(255,80,80,.3);}")
+        wp_hk_clear_btn.clicked.connect(lambda: self._waypoints_hk.clear())
+        wp_hk_row_layout.addWidget(wp_hk_clear_btn)
         active_layout[0].addWidget(wp_hk_lbl)
-        active_layout[0].addWidget(self._waypoints_hk)
+        active_layout[0].addWidget(wp_hk_row)
         wp_hk_note = QLabel('Restart required to apply hotkey change.')
         wp_hk_note.setStyleSheet('color:#64748b; font:11px "Segoe UI"; margin-top:-4px;')
         active_layout[0].addWidget(wp_hk_note)
@@ -570,6 +689,24 @@ class SettingsDialog(QDialog):
                 "QPushButton:disabled{color:#666;border-color:#444;background:#222;}")
             ctrl_row_layout.addWidget(self._wp_ctrl_display)
             ctrl_row_layout.addWidget(self._wp_ctrl_record_btn)
+            _wp_ctrl_clear_btn = QPushButton('Clear')
+            _wp_ctrl_clear_btn.setFixedHeight(32)
+            _wp_ctrl_clear_btn.setStyleSheet(
+                "QPushButton{background:rgba(255,80,80,.15);border:1px solid rgba(255,80,80,.4);"
+                "color:#ff6060;border-radius:6px;padding:0 10px;font:11px 'Segoe UI';}"
+                "QPushButton:hover{background:rgba(255,80,80,.3);}")
+
+            def _wp_ctrl_clear():
+                self._wp_ctrl_display.setText('None')
+                try:
+                    existing = _load_controller_hotkey_settings()
+                    existing["open_waypoints"] = 0
+                    _save_controller_hotkey_settings(existing)
+                except Exception:
+                    pass
+
+            _wp_ctrl_clear_btn.clicked.connect(_wp_ctrl_clear)
+            ctrl_row_layout.addWidget(_wp_ctrl_clear_btn)
             active_layout[0].addWidget(ctrl_row)
             ctrl_note = QLabel(
                 'Hold button combo on controller, then release. Restart required.')
@@ -749,9 +886,6 @@ class SettingsDialog(QDialog):
     def _save_nearby_hotkey(self):
         seq_str = self._nearby_hk.keySequence().toString()
         parsed = _seq_str_to_vk(seq_str)
-        if parsed is None:
-            return
-        vk, mod = parsed
         wp_seq_str = self._waypoints_hk.keySequence().toString()
         wp_parsed = _seq_str_to_vk(wp_seq_str)
         try:
@@ -760,10 +894,16 @@ class SettingsDialog(QDialog):
                     data = json.load(f)
             except Exception:
                 data = {}
-            data['open_nearby'] = {'vk': vk, 'mod': mod, 'enabled': True}
+            if parsed is not None:
+                vk, mod = parsed
+                data['open_nearby'] = {'vk': vk, 'mod': mod, 'enabled': True}
+            else:
+                data['open_nearby'] = {'vk': 0, 'mod': 0, 'enabled': False}
             if wp_parsed is not None:
                 wp_vk, wp_mod = wp_parsed
                 data['open_waypoints'] = {'vk': wp_vk, 'mod': wp_mod, 'enabled': True}
+            else:
+                data['open_waypoints'] = {'vk': 0, 'mod': 0, 'enabled': False}
             os.makedirs(os.path.dirname(_HOTKEY_SETTINGS_FILE), exist_ok=True)
             with open(_HOTKEY_SETTINGS_FILE, 'w', encoding='utf-8') as f:
                 json.dump(data, f, indent=2)

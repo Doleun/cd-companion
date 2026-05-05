@@ -518,7 +518,8 @@ def _hotkey_thread():
         nearby_enabled = _nearby_controls_enabled()
         controller_buttons = _controller_buttons(get_xinput_state)
         if nearby_enabled:
-            controller_pressed = bool((controller_buttons & XINPUT_OPEN_NEARBY_MASK) == XINPUT_OPEN_NEARBY_MASK)
+            open_nb_mask = controller_hotkeys.get("open_nearby", XINPUT_OPEN_NEARBY_MASK)
+            controller_pressed = open_nb_mask and bool((controller_buttons & open_nb_mask) == open_nb_mask)
             if controller_pressed and not controller_open_nearby_pressed and _hotkey_loop and not _nearby_hotkey_paused:
                 _hotkey_loop.call_soon_threadsafe(
                     asyncio.ensure_future, _hotkey_open_nearby())
@@ -530,7 +531,8 @@ def _hotkey_thread():
                 controller_button_state[button_mask] = pressed
                 if not pressed or was_pressed:
                     continue
-                if button_mask == XINPUT_GAMEPAD_DPAD_DOWN and controller_buttons & XINPUT_GAMEPAD_LEFT_SHOULDER:
+                # Nao processar botoes que fazem parte do combo de abertura
+                if button_mask & open_nb_mask and (controller_buttons & open_nb_mask) == open_nb_mask:
                     continue
                 if not _nearby_popup_is_foreground():
                     continue

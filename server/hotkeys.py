@@ -71,6 +71,7 @@ CONTROLLER_HOTKEYS_FILE = os.path.join(SAVE_DIR, "cd_controller_hotkeys.json")
 
 DEFAULT_CONTROLLER_HOTKEYS = {
     "open_waypoints": XINPUT_OPEN_WAYPOINTS_MASK,
+    "open_nearby": XINPUT_OPEN_NEARBY_MASK,
 }
 
 
