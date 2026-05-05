@@ -4,6 +4,9 @@
 - Focus toggle: configurable keyboard hotkey and controller combo to switch focus between Crimson Desert and the overlay map (disabled by default, set up in Settings > Window).
 - Circular window mode now shows a subtle highlight ring around the edge when the cursor hovers over the resize area, making the draggable border easier to find.
 
+### Fixed
+- Circular window size is now preserved when toggling between circular and square mode.
+
 ## v0.07.00
 
 ### Added
