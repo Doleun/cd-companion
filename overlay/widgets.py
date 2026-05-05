@@ -191,8 +191,7 @@ class SettingsDialog(QDialog):
         super().__init__(parent)
         self.setWindowTitle('Settings')
         self.setWindowFlags(
-            self.windowFlags()
-            | Qt.WindowStaysOnTopHint
+            (self.windowFlags() | Qt.WindowStaysOnTopHint)
             & ~Qt.WindowContextHelpButtonHint
         )
         self.setStyleSheet(SETTINGS_STYLE)
