@@ -21,4 +21,5 @@ SETTING_DEFAULTS = {
     'nearbyThreshold':       0.005,
     'nearbyRespectMapVisibility': True,
     'mapIconScale':          1.0,
+    'browserZoom':           100,    # 70–150 %
 }

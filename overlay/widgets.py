@@ -346,6 +346,27 @@ class SettingsDialog(QDialog):
         self._slider.valueChanged.connect(on_slider)
         slider_block('Transparency', transp_val, self._slider)
 
+        # Browser zoom
+        zoom_val = QLabel(f'{cfg.get("browserZoom", SETTING_DEFAULTS["browserZoom"])}%')
+        zoom_val.setStyleSheet('color:#ffd060; font:12px "Segoe UI"; min-width:32px;')
+        self._zoom_slider = NoWheelSlider(Qt.Horizontal)
+        self._zoom_slider.setRange(70, 150)
+        self._zoom_slider.setSingleStep(5)
+        self._zoom_slider.setPageStep(10)
+        self._zoom_slider.setValue(cfg.get('browserZoom', SETTING_DEFAULTS['browserZoom']))
+
+        def on_zoom(v):
+            # Snap to nearest 5
+            snapped = round(v / 5) * 5
+            if snapped != v:
+                self._zoom_slider.setValue(snapped)
+                return
+            zoom_val.setText(f'{v}%')
+
+        self._zoom_slider.valueChanged.connect(on_zoom)
+        slider_block('Browser zoom', zoom_val, self._zoom_slider,
+                     'Zoom level of the map page. Applied immediately on save.')
+
         win_layout.addStretch(1)
 
         # ══════════════════════════════════════════════════════════════
@@ -875,6 +896,7 @@ class SettingsDialog(QDialog):
     def get_settings(self):
         result = {key: cb.isChecked() for key, cb in self._checkboxes.items()}
         result['transparency'] = self._slider.value()
+        result['browserZoom'] = self._zoom_slider.value()
         result['centerTeleportY'] = float(self._center_y.value())
         result['headingSource'] = self._heading_combo.currentData()
         result['realtimeTransport'] = self._realtime_transport_combo.currentData()
