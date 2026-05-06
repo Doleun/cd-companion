@@ -36,6 +36,25 @@ def _elevate():
 if not _is_admin():
     _elevate()
 
+# ── Instância única (named mutex) ─────────────────────────────────────
+
+_MUTEX_NAME = "Global\\CDCompanion_SingleInstance"
+
+def _acquire_single_instance_mutex():
+    """Cria um named mutex global. Retorna o handle ou encerra o processo."""
+    handle = ctypes.windll.kernel32.CreateMutexW(None, True, _MUTEX_NAME)
+    if ctypes.windll.kernel32.GetLastError() == 183:  # ERROR_ALREADY_EXISTS
+        ctypes.windll.user32.MessageBoxW(
+            None,
+            "CD Companion já está em execução.",
+            "CD Companion",
+            0x00000030,  # MB_ICONWARNING
+        )
+        sys.exit(0)
+    return handle  # mantém o handle vivo enquanto o processo rodar
+
+_mutex_handle = _acquire_single_instance_mutex()
+
 # ── Lançamento ────────────────────────────────────────────────────────
 
 def main():
