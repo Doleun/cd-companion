@@ -9,3 +9,5 @@ __pycache__/
 CD_Companion.exe
 /overlay/CD_Companion.exe
 /overlay/cd_server.log
+/server/certs/server.crt
+/server/certs/server.key
