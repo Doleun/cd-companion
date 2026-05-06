@@ -1,7 +1,7 @@
 ## v0.08.00
 
 ### Added
-- Server-only mode: new `overlayMode` setting (Settings > Performance) that runs only the WebSocket server, hotkeys, and controller polling without opening the map window — ideal for users who rely on the Chrome extension or Android app as their map display.
+- Server-only mode: runs only the WebSocket server, hotkeys, and controller polling without opening the map window — ideal for users who rely on the Chrome extension or Android app as their map display.
 - Mode selector dialog on startup to choose between full overlay and server-only mode.
 - Focus toggle: configurable keyboard hotkey and controller combo to switch focus between Crimson Desert and the overlay map (disabled by default, set up in Settings > Window).
 - Circular window mode now shows a subtle highlight ring around the edge when the cursor hovers over the resize area, making the draggable border easier to find.
