@@ -1,7 +1,6 @@
 """Constantes de configuração compartilhadas entre overlay_app.py e overlay_widgets.py."""
 
 SETTING_DEFAULTS = {
-    'overlayMode':          'full', # 'full'|'server_only'
     'restoreLastPosition':  True,
     'autoHideFound':        True,
     'autoHideLeftSidebar':  False,
