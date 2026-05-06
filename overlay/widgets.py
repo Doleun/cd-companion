@@ -57,6 +57,33 @@ _MOD_MAP  = {'Shift': 0x10, 'Ctrl': 0x11, 'Alt': 0x12}
 _VK_DISP  = {v: k for k, v in _VK_MAP.items()}
 _MOD_DISP = {0x10: 'Shift', 0x11: 'Ctrl', 0x12: 'Alt'}
 
+# Modifier bitmask for RegisterHotKey (different from VK codes above)
+_MOD_WIN_MAP = {'Ctrl': 0x0002, 'Shift': 0x0004, 'Alt': 0x0001}
+_MOD_WIN_DISP_ORDER = [(0x0002, 'Ctrl'), (0x0004, 'Shift'), (0x0001, 'Alt')]
+
+
+def _seq_str_to_vk_win(seq_str):
+    """'Ctrl+Shift+M' → (vk, mod_win) for RegisterHotKey. Supports multiple modifiers."""
+    parts = [p.strip() for p in seq_str.split('+')]
+    key = parts[-1]
+    vk = _VK_MAP.get(key.upper() if len(key) == 1 else key)
+    if vk is None:
+        return None
+    mod_win = 0
+    for p in parts[:-1]:
+        m = _MOD_WIN_MAP.get(p)
+        if m:
+            mod_win |= m
+    return vk, mod_win
+
+
+def _vk_win_to_seq_str(vk, mod_win):
+    """(vk, mod_win) → 'Ctrl+Shift+M' string for QKeySequence."""
+    key = _VK_DISP.get(vk, f'VK{vk:#04x}')
+    parts = [name for bit, name in _MOD_WIN_DISP_ORDER if mod_win & bit]
+    parts.append(key)
+    return '+'.join(parts)
+
 
 def _vk_to_seq_str(vk, mod):
     key = _VK_DISP.get(vk, f'VK{vk:#04x}')
@@ -369,6 +396,166 @@ class SettingsDialog(QDialog):
         self._zoom_slider.valueChanged.connect(on_zoom)
         slider_block('Browser zoom', zoom_val, self._zoom_slider,
                      'Zoom level of the map page. Applied immediately on save.')
+
+        # Show/hide overlay hotkey
+        section('Show / hide overlay', win_layout)
+        to_hk_lbl = QLabel('Keyboard hotkey')
+        self._to_hk = QKeySequenceEdit()
+        self._to_hk.setFixedHeight(32)
+        self._to_hk.setAttribute(Qt.WA_StyledBackground, True)
+        self._to_hk.setStyleSheet(
+            "QKeySequenceEdit{background:#e2e8f0;color:#111827;"
+            "border:1px solid #64748b;border-radius:6px;padding:4px 8px;"
+            "selection-background-color:#ffd060;selection-color:#111827;}"
+            "QKeySequenceEdit:focus{border:1px solid #ffd060;}")
+        _to_hk_line = self._to_hk.findChild(QLineEdit)
+        if _to_hk_line:
+            _to_hk_line.setStyleSheet(
+                "QLineEdit{background:#e2e8f0;color:#111827;border:none;"
+                "selection-background-color:#ffd060;selection-color:#111827;}")
+        self._to_hk.setToolTip('Restart overlay for the new hotkey to take effect')
+        self._to_hk._hk_finalized = False
+
+        def _to_on_seq_changed(seq):
+            first = seq.toString().split(', ')[0]
+            if first != seq.toString():
+                self._to_hk.setKeySequence(QKeySequence(first))
+            self._to_hk._hk_finalized = True
+
+        def _to_hk_key_press(e):
+            if self._to_hk._hk_finalized:
+                self._to_hk.clear()
+                self._to_hk._hk_finalized = False
+            QKeySequenceEdit.keyPressEvent(self._to_hk, e)
+
+        self._to_hk.keySequenceChanged.connect(_to_on_seq_changed)
+        self._to_hk.keyPressEvent = _to_hk_key_press
+
+        def _to_hk_focus_in(e):
+            if _set_nearby_hotkey_paused: _set_nearby_hotkey_paused(True)
+            QKeySequenceEdit.focusInEvent(self._to_hk, e)
+        def _to_hk_focus_out(e):
+            if _set_nearby_hotkey_paused: _set_nearby_hotkey_paused(False)
+            QKeySequenceEdit.focusOutEvent(self._to_hk, e)
+        self._to_hk.focusInEvent = _to_hk_focus_in
+        self._to_hk.focusOutEvent = _to_hk_focus_out
+
+        to_hk_vk = 0x4D   # M
+        to_hk_mod_win = 0x0006  # Ctrl+Shift
+        try:
+            with open(_HOTKEY_SETTINGS_FILE, 'r', encoding='utf-8') as _f:
+                _to_hk_data = json.load(_f).get('toggle_overlay', {})
+                to_hk_vk = _to_hk_data.get('vk', to_hk_vk)
+                to_hk_mod_win = _to_hk_data.get('mod_win', to_hk_mod_win)
+        except Exception:
+            pass
+        self._to_hk.setKeySequence(QKeySequence(_vk_win_to_seq_str(to_hk_vk, to_hk_mod_win)))
+
+        to_hk_row = QWidget()
+        to_hk_row_layout = QHBoxLayout(to_hk_row)
+        to_hk_row_layout.setContentsMargins(0, 0, 0, 0)
+        to_hk_row_layout.setSpacing(6)
+        to_hk_row_layout.addWidget(self._to_hk)
+        to_hk_clear_btn = QPushButton('Clear')
+        to_hk_clear_btn.setFixedHeight(32)
+        to_hk_clear_btn.setStyleSheet(
+            "QPushButton{background:rgba(255,80,80,.15);border:1px solid rgba(255,80,80,.4);"
+            "color:#ff6060;border-radius:6px;padding:0 10px;font:11px 'Segoe UI';}"
+            "QPushButton:hover{background:rgba(255,80,80,.3);}")
+        to_hk_clear_btn.clicked.connect(lambda: self._to_hk.clear())
+        to_hk_row_layout.addWidget(to_hk_clear_btn)
+        active_layout[0].addWidget(to_hk_lbl)
+        active_layout[0].addWidget(to_hk_row)
+
+        if _HAS_CONTROLLER_HOTKEYS:
+            active_layout[0].addWidget(QLabel('Controller combo'))
+            to_ctrl_row = QWidget()
+            to_ctrl_row_layout = QHBoxLayout(to_ctrl_row)
+            to_ctrl_row_layout.setContentsMargins(0, 0, 0, 0)
+            to_ctrl_row_layout.setSpacing(6)
+            _to_ctrl_settings = _load_controller_hotkey_settings()
+            _to_ctrl_mask = _to_ctrl_settings.get("toggle_overlay", 0)
+            self._to_ctrl_display = QLineEdit(mask_to_name(_to_ctrl_mask))
+            self._to_ctrl_display.setReadOnly(True)
+            self._to_ctrl_display.setFixedHeight(32)
+            self._to_ctrl_display.setStyleSheet(
+                "QLineEdit{background:#e2e8f0;color:#111827;border:1px solid #64748b;"
+                "border-radius:6px;padding:4px 8px;}")
+            self._to_ctrl_record_btn = QPushButton('Record')
+            self._to_ctrl_record_btn.setFixedHeight(32)
+            self._to_ctrl_record_btn.setStyleSheet(
+                "QPushButton{background:rgba(255,208,96,.18);"
+                "border:1px solid rgba(255,208,96,.5);"
+                "color:#ffd060;border-radius:6px;padding:0 10px;}"
+                "QPushButton:hover{background:rgba(255,208,96,.3);}"
+                "QPushButton:disabled{color:#666;border-color:#444;background:#222;}")
+            _to_ctrl_clear_btn = QPushButton('Clear')
+            _to_ctrl_clear_btn.setFixedHeight(32)
+            _to_ctrl_clear_btn.setStyleSheet(
+                "QPushButton{background:rgba(255,80,80,.15);border:1px solid rgba(255,80,80,.4);"
+                "color:#ff6060;border-radius:6px;padding:0 10px;font:11px 'Segoe UI';}"
+                "QPushButton:hover{background:rgba(255,80,80,.3);}")
+
+            def _to_ctrl_clear():
+                self._to_ctrl_display.setText('None')
+                try:
+                    existing = _load_controller_hotkey_settings()
+                    existing["toggle_overlay"] = 0
+                    _save_controller_hotkey_settings(existing)
+                except Exception:
+                    pass
+
+            _to_ctrl_clear_btn.clicked.connect(_to_ctrl_clear)
+            to_ctrl_row_layout.addWidget(self._to_ctrl_display)
+            to_ctrl_row_layout.addWidget(self._to_ctrl_record_btn)
+            to_ctrl_row_layout.addWidget(_to_ctrl_clear_btn)
+            active_layout[0].addWidget(to_ctrl_row)
+
+            self._to_ctrl_recording = False
+            self._to_ctrl_peak_mask = 0
+            self._to_ctrl_timer = QTimer()
+            self._to_ctrl_timer.setInterval(50)
+            _to_get_xinput = _load_xinput_get_state()
+
+            def _to_ctrl_poll():
+                btns = _controller_buttons(_to_get_xinput)
+                self._to_ctrl_peak_mask |= btns
+                if self._to_ctrl_peak_mask and btns == 0:
+                    saved_mask = self._to_ctrl_peak_mask
+                    self._to_ctrl_timer.stop()
+                    self._to_ctrl_recording = False
+                    self._to_ctrl_record_btn.setText('Record')
+                    self._to_ctrl_record_btn.setEnabled(True)
+                    self._to_ctrl_display.setText(mask_to_name(saved_mask))
+                    if _set_controller_hotkey_paused:
+                        _set_controller_hotkey_paused(False)
+                    try:
+                        existing = _load_controller_hotkey_settings()
+                        existing["toggle_overlay"] = saved_mask
+                        _save_controller_hotkey_settings(existing)
+                    except Exception:
+                        pass
+
+            self._to_ctrl_timer.timeout.connect(_to_ctrl_poll)
+
+            def _to_start_record():
+                if self._to_ctrl_recording:
+                    return
+                self._to_ctrl_recording = True
+                self._to_ctrl_peak_mask = 0
+                self._to_ctrl_display.setFocus()
+                self._to_ctrl_record_btn.setText('Recording...')
+                self._to_ctrl_record_btn.setEnabled(False)
+                if _set_controller_hotkey_paused:
+                    _set_controller_hotkey_paused(True)
+                self._to_ctrl_timer.start()
+
+            self._to_ctrl_record_btn.clicked.connect(_to_start_record)
+
+        to_note = QLabel('Shows or hides the overlay window. Keyboard change requires restart.')
+        to_note.setWordWrap(True)
+        to_note.setStyleSheet('color:#64748b; font:11px "Segoe UI"; margin-top:-4px;')
+        active_layout[0].addWidget(to_note)
 
         # Focus toggle hotkey
         section('Focus toggle', win_layout)
@@ -1076,6 +1263,8 @@ class SettingsDialog(QDialog):
         wp_parsed = _seq_str_to_vk(wp_seq_str)
         ft_seq_str = self._focus_toggle_hk.keySequence().toString()
         ft_parsed = _seq_str_to_vk(ft_seq_str)
+        to_seq_str = self._to_hk.keySequence().toString()
+        to_parsed = _seq_str_to_vk_win(to_seq_str)
         try:
             try:
                 with open(_HOTKEY_SETTINGS_FILE, 'r', encoding='utf-8') as f:
@@ -1097,6 +1286,11 @@ class SettingsDialog(QDialog):
                 data['focus_toggle'] = {'vk': ft_vk, 'mod': ft_mod, 'enabled': True}
             else:
                 data['focus_toggle'] = {'vk': 0, 'mod': 0, 'enabled': False}
+            if to_parsed is not None:
+                to_vk, to_mod_win = to_parsed
+                data['toggle_overlay'] = {'vk': to_vk, 'mod_win': to_mod_win}
+            else:
+                data['toggle_overlay'] = {'vk': 0, 'mod_win': 0}
             os.makedirs(os.path.dirname(_HOTKEY_SETTINGS_FILE), exist_ok=True)
             with open(_HOTKEY_SETTINGS_FILE, 'w', encoding='utf-8') as f:
                 json.dump(data, f, indent=2)
@@ -1344,7 +1538,7 @@ QPushButton { background:transparent; border:none;
 
         self.btn_back     = icon_btn('btn_back',     '\u25c0', 'Back')
         self.btn_settings = icon_btn('btn_settings', '\u2699', 'Settings')
-        self.btn_hide     = icon_btn('btn_hide',     '\u2013', 'Hide  (Ctrl+Shift+M)')
+        self.btn_hide     = icon_btn('btn_hide',     '\u2013', 'Hide')
         self.btn_maximize = icon_btn('btn_maximize', '\u25a1', 'Maximize')
         self.btn_close    = icon_btn('btn_close',    '\u2715', 'Close')
 

@@ -336,6 +336,7 @@ class OverlayWindow(QMainWindow):
         if not getattr(sys, 'frozen', False):
             self._signals.restart.connect(self._do_dev_restart)
         threading.Thread(target=self._hotkey_thread, daemon=True).start()
+        threading.Thread(target=self._controller_toggle_thread, daemon=True).start()
 
         if _set_waypoints_focus_callbacks:
             _set_waypoints_focus_callbacks(
@@ -744,10 +745,25 @@ class OverlayWindow(QMainWindow):
     def _hotkey_thread(self):
         user32    = ctypes.windll.user32
         WM_HOTKEY = 0x0312
-        if not user32.RegisterHotKey(None, HOTKEY_ID, MOD_CONTROL | MOD_SHIFT, HOTKEY_VK):
-            print("[!] Failed to register Ctrl+Shift+M hotkey")
+
+        # Load toggle_overlay hotkey config (keyboard shortcut, may be customised)
+        _hk_vk  = HOTKEY_VK                  # default: M
+        _hk_mod = MOD_CONTROL | MOD_SHIFT    # default: Ctrl+Shift
+        try:
+            _hk_file = os.path.join(
+                os.environ.get('LOCALAPPDATA', ''), 'CD_Teleport', 'cd_hotkeys.json')
+            with open(_hk_file, 'r', encoding='utf-8') as _f:
+                _to_data = json.load(_f).get('toggle_overlay', {})
+                if _to_data.get('vk'):
+                    _hk_vk  = _to_data['vk']
+                    _hk_mod = _to_data.get('mod_win', MOD_CONTROL | MOD_SHIFT)
+        except Exception:
+            pass
+
+        if not user32.RegisterHotKey(None, HOTKEY_ID, _hk_mod, _hk_vk):
+            print("[!] Failed to register show/hide overlay hotkey")
             return
-        print("[*] Hotkey registered: Ctrl+Shift+M  →  show/hide")
+        print("[*] Hotkey registered: show/hide overlay")
         if not getattr(sys, 'frozen', False):
             if user32.RegisterHotKey(None, RESTART_HOTKEY_ID, MOD_CONTROL | MOD_SHIFT | MOD_ALT, RESTART_HOTKEY_VK):
                 print("[*] Hotkey registered: Ctrl+Shift+Alt+R  →  restart (dev-only)")
@@ -765,6 +781,36 @@ class OverlayWindow(QMainWindow):
         user32.UnregisterHotKey(None, HOTKEY_ID)
         if not getattr(sys, 'frozen', False):
             user32.UnregisterHotKey(None, RESTART_HOTKEY_ID)
+
+    def _controller_toggle_thread(self):
+        """Polls controller combo for show/hide overlay (toggle_overlay)."""
+        import time as _time
+        try:
+            from server.hotkeys import (
+                _load_controller_hotkey_settings,
+                _load_xinput_get_state,
+                _controller_buttons,
+            )
+        except Exception:
+            return
+        get_state = _load_xinput_get_state()
+        if not get_state:
+            return
+        settings = _load_controller_hotkey_settings()
+        mask = settings.get("toggle_overlay", 0)
+        pressed_last = False
+        while True:
+            _time.sleep(0.05)
+            if not mask:
+                continue
+            try:
+                buttons = _controller_buttons(get_state)
+                pressed = bool((buttons & mask) == mask)
+                if pressed and not pressed_last:
+                    self._signals.toggle.emit()
+                pressed_last = pressed
+            except Exception:
+                pass
 
     def closeEvent(self, event):
         cfg = load_config()
