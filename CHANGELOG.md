@@ -1,3 +1,8 @@
+## v0.09.01
+
+### Fixed
+- Launching a second instance of CD Companion now shows a warning and exits immediately, instead of opening a duplicate window.
+
 ## v0.09.00
 
 ### Added
