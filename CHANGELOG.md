@@ -1,3 +1,8 @@
+## v0.09.00
+
+### Added
+- Show/hide overlay hotkey is now configurable in Settings > Window: choose any keyboard shortcut (default Ctrl+Shift+M) and optionally assign a controller combo (default: none).
+
 ## v0.08.00
 
 ### Added
