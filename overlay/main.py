@@ -998,22 +998,87 @@ def main():
     window = OverlayWindow(cfg, screen_w, screen_h)
     window.show()
 
+    _tray, _tray_parent = _create_tray_icon(app, 'CD Companion', toggle_fn=window._toggle_visible)
+
     print("[*] Overlay started  —  hotkey: Ctrl+Shift+M")
 
     sys.exit(app.exec_())
 
 
+def _create_tray_icon(app, tooltip='CD Companion', toggle_fn=None):
+    """Cria e retorna um QSystemTrayIcon com menu Quit.
+
+    Se toggle_fn for fornecido (modo full), clique esquerdo e a opção
+    'Show/Hide Overlay' no menu acionam esse callback.
+    Não chama app.exec_().
+
+    Nota: QMenu requer um QWidget como parent no Windows para não ser
+    coletado pelo GC e para o setContextMenu funcionar corretamente.
+    """
+    from PyQt5.QtWidgets import QSystemTrayIcon, QMenu, QAction, QWidget
+    from PyQt5.QtGui import QIcon
+
+    _icon_dir = os.environ.get(
+        'CD_APP_DIR',
+        os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    )
+    icon = QIcon(os.path.join(_icon_dir, 'launcher.ico'))
+
+    # Widget oculto: serve de parent para o menu (requisito do Windows)
+    parent_widget = QWidget()
+    parent_widget.hide()
+
+    tray = QSystemTrayIcon(icon, parent_widget)
+    tray.setToolTip(tooltip)
+
+    menu = QMenu(parent_widget)
+
+    if toggle_fn is not None:
+        toggle_action = QAction('Show/Hide Overlay', menu)
+        toggle_action.triggered.connect(toggle_fn)
+        menu.addAction(toggle_action)
+        menu.addSeparator()
+
+        def _on_activated(reason):
+            if reason == QSystemTrayIcon.Trigger:
+                toggle_fn()
+
+        tray.activated.connect(_on_activated)
+
+    quit_action = QAction('Quit', menu)
+    quit_action.triggered.connect(app.quit)
+    menu.addAction(quit_action)
+
+    tray.setContextMenu(menu)
+    tray.show()
+
+    # Retorna tupla para manter referências vivas no chamador
+    return tray, parent_widget
+
+
 def _run_server_only():
-    """Executa apenas o servidor WebSocket + hotkeys, sem PyQt5/WebEngine."""
-    print("[*] Running in SERVER ONLY mode — no overlay window")
-    print("[*] Press Ctrl+C to stop")
+    """Executa apenas o servidor WebSocket + hotkeys, sem overlay.
+
+    Mantém um QSystemTrayIcon na bandeja para que o usuário possa encerrar
+    a aplicação sem precisar do gerenciador de tarefas.
+    """
+    import threading
     from server.main import _main
-    try:
-        asyncio.run(_main())
-    except KeyboardInterrupt:
-        import logging
-        logging.getLogger('cd_server').info("Shutting down (server_only)")
-        print("\n[*] Server stopped")
+
+    app = QApplication.instance() or QApplication(sys.argv)
+    app.setQuitOnLastWindowClosed(False)
+
+    _tray, _tray_parent = _create_tray_icon(app, 'CD Companion — Server Only')
+
+    # Servidor em thread daemon — encerra junto com o processo
+    server_thread = threading.Thread(
+        target=lambda: asyncio.run(_main()),
+        daemon=True,
+        name='cd-server',
+    )
+    server_thread.start()
+
+    sys.exit(app.exec_())
 
 if __name__ == '__main__':
     main()

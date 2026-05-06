@@ -2,6 +2,7 @@
 
 ### Added
 - Show/hide overlay hotkey is now configurable in Settings > Window: choose any keyboard shortcut (default Ctrl+Shift+M) and optionally assign a controller combo (default: none).
+- System tray icon: both full and server-only modes now show an icon in the system tray. Right-click to quit; in full mode, left-click or the "Show/Hide Overlay" menu item toggles the overlay window.
 
 ## v0.08.00
 
