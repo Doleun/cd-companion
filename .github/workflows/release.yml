@@ -40,9 +40,15 @@ jobs:
         run: |
           git archive HEAD --format=zip -o dist/CD_Companion_source_${{ github.ref_name }}.zip
 
+      - name: Extract tag annotation as release notes
+        run: |
+          git fetch --tags --force
+          git tag -l --format='%(contents)' "${{ github.ref_name }}" | Out-File -FilePath dist/release_notes.txt -Encoding utf8
+
       - name: Upload Release Asset
         uses: softprops/action-gh-release@v2
         with:
+          body_path: dist/release_notes.txt
           files: |
             dist/CD_Companion.zip
             dist/CD_Companion_source_${{ github.ref_name }}.zip
