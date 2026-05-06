@@ -132,9 +132,11 @@ _INJECT_PARTS = [
     '12_init.js',
 ]
 
+
 def _load_inject_js():
     _dir = os.path.dirname(os.path.abspath(__file__))
     parts_dir = os.path.join(_dir, 'inject_parts')
+
     if os.path.isdir(parts_dir) and all(
         os.path.isfile(os.path.join(parts_dir, p)) for p in _INJECT_PARTS
     ):
@@ -653,6 +655,7 @@ class OverlayWindow(QMainWindow):
             self._last_native_realtime_seq = None
             zoom = settings.get('browserZoom', 100)
             self._view.setZoomFactor(zoom / 100.0)
+
             self._view.page().runJavaScript(
                 f'window.__cdSettings = {json.dumps(settings)};'
                 f'window.__cdNativeRealtimeEnabled = '
@@ -777,6 +780,7 @@ class OverlayWindow(QMainWindow):
         save_config(cfg)
         print("[*] Config saved")
         super().closeEvent(event)
+        QApplication.instance().quit()
 
 # ── Main ──────────────────────────────────────────────────────────────
 
@@ -795,7 +799,6 @@ def _start_server_thread(ready_event):
 def main():
     # Habilitar DPI awareness antes de criar o app
     ctypes.windll.user32.SetProcessDPIAware()
-    register_mapgenie_patch_scheme()
 
     # ── Log file (sem console, logs vão para arquivo) ─────────────────
     # Definido ANTES de importar server.main, pois o logging é configurado
@@ -816,10 +819,17 @@ def main():
     if not cfg.get('useSharedMemoryEntity', True):
         os.environ['CD_USE_SHARED_MEMORY_ENTITY'] = '0'
 
+    overlay_mode = cfg.get('overlayMode', SETTING_DEFAULTS['overlayMode'])
+
     # ── Checagem de admin e dependências (antes de qualquer coisa) ────
     from server.main import assert_admin, _check_dependencies
     assert_admin()
     _check_dependencies()
+
+    # ── Modo server_only: sem PyQt5, apenas servidor + hotkeys ────────
+    if overlay_mode == 'server_only':
+        _run_server_only()
+        return
 
     # ── Servidor WebSocket como thread daemon ─────────────────────────
     _server_ready = threading.Event()
@@ -834,6 +844,10 @@ def main():
     if cfg.get('disableGpuVsync'):
         sys.argv += ['--disable-gpu-vsync']
 
+    # Recarrega INJECT_JS para o modo correto
+    global INJECT_JS
+
+    register_mapgenie_patch_scheme()
     app = QApplication(sys.argv)
     app.setQuitOnLastWindowClosed(False)
     app.setApplicationName('CD Map Overlay')
@@ -843,7 +857,21 @@ def main():
     window.show()
 
     print("[*] Overlay started  —  hotkey: Ctrl+Shift+M")
+
     sys.exit(app.exec_())
+
+
+def _run_server_only():
+    """Executa apenas o servidor WebSocket + hotkeys, sem PyQt5/WebEngine."""
+    print("[*] Running in SERVER ONLY mode — no overlay window")
+    print("[*] Press Ctrl+C to stop")
+    from server.main import _main
+    try:
+        asyncio.run(_main())
+    except KeyboardInterrupt:
+        import logging
+        logging.getLogger('cd_server').info("Shutting down (server_only)")
+        print("\n[*] Server stopped")
 
 if __name__ == '__main__':
     main()
