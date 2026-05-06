@@ -1003,37 +1003,6 @@ class SettingsDialog(QDialog):
         perf_scroll, perf_layout = _make_tab_scroll()
         tabs.addTab(perf_scroll, 'Performance')
 
-        section('Overlay mode', perf_layout)
-        active_layout[0].addWidget(QLabel('Mode'))
-        self._overlay_mode_combo = QComboBox()
-        self._overlay_mode_combo.setFixedHeight(32)
-        self._overlay_mode_combo.setStyleSheet(
-            "QComboBox{background:#e2e8f0;color:#111827;border:1px solid #64748b;"
-            "border-radius:6px;padding:4px 30px 4px 8px;}"
-            "QComboBox:focus{border:1px solid #ffd060;}"
-            "QComboBox::drop-down{subcontrol-origin:padding;subcontrol-position:top right;"
-            "width:24px;border-left:1px solid #94a3b8;background:#cbd5e1;"
-            "border-top-right-radius:6px;border-bottom-right-radius:6px;}"
-            "QComboBox::down-arrow{image:none;width:0;height:0;"
-            "border-left:4px solid transparent;border-right:4px solid transparent;"
-            "border-top:5px solid #1f2937;}"
-            "QComboBox QAbstractItemView{background:#f8fafc;color:#111827;"
-            "selection-background-color:#ffd060;selection-color:#111827;"
-            "border:1px solid #475569;}")
-        self._overlay_mode_combo.addItem('Full — map rendered in overlay', 'full')
-        self._overlay_mode_combo.addItem('Server only — no window, max performance', 'server_only')
-        current_mode = cfg.get('overlayMode', SETTING_DEFAULTS['overlayMode'])
-        idx = self._overlay_mode_combo.findData(current_mode)
-        if idx >= 0:
-            self._overlay_mode_combo.setCurrentIndex(idx)
-        active_layout[0].addWidget(self._overlay_mode_combo)
-        mode_note = QLabel(
-            'Server only: no overlay window at all. Only WebSocket server + hotkeys.\n'
-            'Restart required to apply.')
-        mode_note.setWordWrap(True)
-        mode_note.setStyleSheet('color:#64748b; font:11px "Segoe UI"; margin-top:-4px;')
-        active_layout[0].addWidget(mode_note)
-
         section('Performance', perf_layout)
         option('disableGpuVsync', 'Disable GPU vsync (multi-monitor fix)',
                'Fixes FPS cap when using the overlay on a secondary monitor with '
@@ -1097,7 +1066,6 @@ class SettingsDialog(QDialog):
         result['realtimeTransport'] = self._realtime_transport_combo.currentData()
         result['nearbyThreshold'] = self._nearby_radius.value() / 1000.0
         result['mapIconScale'] = self._map_icon_scale.value() / 10.0
-        result['overlayMode'] = self._overlay_mode_combo.currentData()
         self._save_nearby_hotkey()
         return result
 

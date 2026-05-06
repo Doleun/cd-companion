@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 """
 Crimson Desert Map Overlay
 ==========================
@@ -796,6 +797,87 @@ def _start_server_thread(ready_event):
         logging.getLogger('cd_server').error("Server thread crashed: %s", e)
         ready_event.set()  # desbloqueia o overlay imediatamente
 
+def _show_mode_selector(current_mode):
+    """Mostra um dialog nativo Qt para o usuário escolher o modo de operação.
+
+    Retorna 'full' ou 'server_only'. Retorna None se o usuário fechou sem escolher.
+    O QApplication é criado temporariamente se necessário e reutilizado depois.
+    """
+    from PyQt5.QtWidgets import QDialog, QVBoxLayout, QHBoxLayout, QLabel, QPushButton
+    from PyQt5.QtCore import Qt
+
+    # Precisa de QApplication para mostrar o dialog
+    app = QApplication.instance()
+    if app is None:
+        app = QApplication(sys.argv)
+        app.setApplicationName('CD Map Overlay')
+
+    chosen = [None]
+
+    dlg = QDialog()
+    dlg.setWindowTitle('CD Companion - Mode')
+    dlg.setWindowFlags(Qt.WindowCloseButtonHint | Qt.WindowStaysOnTopHint)
+    dlg.setFixedSize(380, 180)
+    dlg.setStyleSheet(
+        'QDialog{background:#0f0f1a;}'
+        'QLabel{color:#e8e8e8;}'
+        'QPushButton{min-height:44px;border-radius:7px;font:bold 13px "Segoe UI";}'
+    )
+
+    layout = QVBoxLayout(dlg)
+    layout.setSpacing(14)
+    layout.setContentsMargins(24, 20, 24, 20)
+
+    title = QLabel('Choose overlay mode')
+    title.setStyleSheet('font:bold 15px "Segoe UI";color:#ffd060;')
+    title.setAlignment(Qt.AlignCenter)
+    layout.addWidget(title)
+
+    desc = QLabel(
+        '<b>Full</b> - map overlay with all features<br>'
+        '<b>Server Only</b> - no window, only WebSocket + hotkeys (saves ~300 MB RAM)')
+    desc.setStyleSheet('font:11px "Segoe UI";color:#94a3b8;')
+    desc.setWordWrap(True)
+    desc.setAlignment(Qt.AlignCenter)
+    layout.addWidget(desc)
+
+    btn_row = QHBoxLayout()
+    btn_row.setSpacing(12)
+
+    btn_full = QPushButton('Full')
+    btn_full.setStyleSheet(
+        'QPushButton{background:rgba(96,184,255,.15);border:1.5px solid rgba(96,184,255,.5);'
+        'color:#60b8ff;}'
+        'QPushButton:hover{background:rgba(96,184,255,.3);}')
+    btn_full.clicked.connect(lambda: (chosen.__setitem__(0, 'full'), dlg.accept()))
+
+    btn_server = QPushButton('Server Only')
+    btn_server.setStyleSheet(
+        'QPushButton{background:rgba(255,208,96,.12);border:1.5px solid rgba(255,208,96,.45);'
+        'color:#ffd060;}'
+        'QPushButton:hover{background:rgba(255,208,96,.25);}')
+    btn_server.clicked.connect(lambda: (chosen.__setitem__(0, 'server_only'), dlg.accept()))
+
+    btn_row.addWidget(btn_full)
+    btn_row.addWidget(btn_server)
+    layout.addLayout(btn_row)
+
+    # Destacar o modo atual
+    if current_mode == 'server_only':
+        btn_server.setDefault(True)
+        btn_server.setFocus()
+    else:
+        btn_full.setDefault(True)
+        btn_full.setFocus()
+
+    dlg.exec_()
+    dlg.deleteLater()
+    # Processar eventos pendentes para garantir destruição do dialog
+    app.processEvents()
+
+    return chosen[0]
+
+
 def main():
     # Habilitar DPI awareness antes de criar o app
     ctypes.windll.user32.SetProcessDPIAware()
@@ -819,7 +901,19 @@ def main():
     if not cfg.get('useSharedMemoryEntity', True):
         os.environ['CD_USE_SHARED_MEMORY_ENTITY'] = '0'
 
-    overlay_mode = cfg.get('overlayMode', SETTING_DEFAULTS['overlayMode'])
+    overlay_mode = cfg.get('overlayMode', 'full')
+
+    # ── Seletor de modo na inicialização ──────────────────────────────
+    # Mostra um dialog leve para o usuário escolher o modo de operação.
+    # O dialog é destruído imediatamente após a escolha.
+    overlay_mode = _show_mode_selector(overlay_mode)
+    if overlay_mode is None:
+        # Usuário fechou o dialog sem escolher — encerra
+        return
+    # Persiste a escolha para próximas execuções
+    if overlay_mode != cfg.get('overlayMode'):
+        cfg['overlayMode'] = overlay_mode
+        save_config(cfg)
 
     # ── Checagem de admin e dependências (antes de qualquer coisa) ────
     from server.main import assert_admin, _check_dependencies
@@ -848,7 +942,9 @@ def main():
     global INJECT_JS
 
     register_mapgenie_patch_scheme()
-    app = QApplication(sys.argv)
+    app = QApplication.instance()
+    if app is None:
+        app = QApplication(sys.argv)
     app.setQuitOnLastWindowClosed(False)
     app.setApplicationName('CD Map Overlay')
     screen_w, screen_h = get_screen_size()
