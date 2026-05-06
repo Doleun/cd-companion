@@ -1018,10 +1018,10 @@ def _create_tray_icon(app, tooltip='CD Companion', toggle_fn=None):
     from PyQt5.QtWidgets import QSystemTrayIcon, QMenu, QAction, QWidget
     from PyQt5.QtGui import QIcon
 
-    _icon_dir = os.environ.get(
-        'CD_APP_DIR',
-        os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-    )
+    if getattr(sys, 'frozen', False):
+        _icon_dir = sys._MEIPASS
+    else:
+        _icon_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
     icon = QIcon(os.path.join(_icon_dir, 'launcher.ico'))
 
     # Widget oculto: serve de parent para o menu (requisito do Windows)

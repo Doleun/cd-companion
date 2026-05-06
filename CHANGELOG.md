@@ -2,6 +2,7 @@
 
 ### Fixed
 - Launching a second instance of CD Companion now shows a warning and exits immediately, instead of opening a duplicate window.
+- System tray icon not appearing in the compiled exe. The icon file is now correctly bundled and resolved at runtime.
 
 ## v0.09.00
 
