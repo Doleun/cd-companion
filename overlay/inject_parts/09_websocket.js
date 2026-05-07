@@ -87,7 +87,7 @@
           if (msg.ok) {
             hasPreTeleport = true; updatePanel();
           } else {
-            setStatus(msg.err || 'No map marker set', '#e07070', 3000);
+            setStatus(msg.err || _t('teleport.no_marker'), '#e07070', 3000);
           }
 
         } else if (msg.type === 'teleport_map_result') {
@@ -95,7 +95,7 @@
             hasPreTeleport = true; updatePanel();
           } else {
             hasPreTeleport = false; updatePanel();
-            setStatus(msg.err || 'Map teleport failed', '#e07070', 3000);
+            setStatus(msg.err || _t('teleport.map_failed'), '#e07070', 3000);
           }
 
         } else if (msg.type === 'location_toggle') {

@@ -175,6 +175,15 @@ Accessible via the `⚙` button in the bar (hover at the top of the window):
 
 Saved in `overlay_config.json` (in the executable's or script's directory).
 
+### Language
+
+The overlay ships with **English** and **Português (Brasil)**. The language can be
+changed in **Settings > Window > Language**.
+
+To add a community translation, create a `locales/` folder next to `CD_Companion.exe`
+and place a JSON file there. See [`overlay/locales/README.md`](overlay/locales/README.md)
+for the format and contribution instructions.
+
 ---
 
 ## Global hotkeys

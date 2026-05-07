@@ -72,8 +72,8 @@
         'transition:opacity .3s;opacity:0;white-space:nowrap';
       document.body.appendChild(toast);
     }
-    const action = found ? 'marcado' : 'desmarcado';
-    toast.textContent = 'Location #' + locationId + ' ' + action + ' em outro cliente';
+    const action = _t(found ? 'sync.marked' : 'sync.unmarked');
+    toast.textContent = _t('sync.location_toast').replace('{0}', locationId).replace('{1}', action);
     toast.style.opacity = '1';
     clearTimeout(toast._t);
     toast._t = setTimeout(() => { toast.style.opacity = '0'; }, 4000);

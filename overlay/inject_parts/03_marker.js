@@ -47,11 +47,11 @@
       font:12px 'Segoe UI',sans-serif;color:#e8e8e8;white-space:nowrap;
     `;
     popup.innerHTML = `
-      <span style="font-size:11px;color:#aaa">Map Marker</span>
+      <span style="font-size:11px;color:#aaa">${_t('marker.map_marker_label')}</span>
       <button id="cdMapMarkerTpBtn"
         style="background:rgba(255,80,80,.2);border:1px solid rgba(255,80,80,.5);
         color:#ff6666;font:11px 'Segoe UI';padding:3px 10px;border-radius:4px;cursor:pointer">
-        📍 Teleport here
+        ${_t('marker.teleport_here')}
       </button>
     `;
     document.body.appendChild(popup);

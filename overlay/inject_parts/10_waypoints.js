@@ -6,7 +6,7 @@
     if (document.getElementById('cdWpToggle')) return;
     const btn = document.createElement('button');
     btn.id = 'cdWpToggle';
-    btn.title = 'Waypoints  (abrir/fechar)';
+    btn.title = _t('waypoints.btn_title');
     btn.textContent = '⭕';
     btn.style.cssText = `position:fixed;bottom:12px;left:12px;z-index:10000;
       width:36px;height:36px;border-radius:50%;
@@ -37,7 +37,7 @@
     if (document.getElementById('cdCenterTp')) return;
     const btn = document.createElement('button');
     btn.id = 'cdCenterTp';
-    btn.title = 'Abrir teleporte para o centro da tela';
+    btn.title = _t('waypoints.center_btn_title');
     btn.textContent = '◎';
     btn.style.cssText = `position:fixed;bottom:12px;left:56px;z-index:10000;
       width:36px;height:36px;border-radius:50%;
@@ -76,7 +76,7 @@
       display:none;flex-direction:column;gap:7px;overflow:hidden`;
     el.innerHTML = `
       <div style="display:flex;align-items:center;gap:6px">
-        <span style="color:#80b4ff;font-weight:600;flex:1;font-size:12px">Centro da tela</span>
+        <span style="color:#80b4ff;font-weight:600;flex:1;font-size:12px">${_t('waypoints.center_title')}</span>
       </div>
       <div style="display:flex;align-items:center;gap:7px">
         <span style="color:#bbb;font-size:11px;white-space:nowrap">Y <span id="cdCenterPanelYVal">${Math.round(getCenterTeleportY())}</span></span>
@@ -84,11 +84,11 @@
           value="${getCenterTeleportY()}"
           style="flex:1;min-width:110px;accent-color:#80b4ff;cursor:pointer">
       </div>
-      <button id="cdCenterPanelTp" title="Teleportar para o centro da tela"
+      <button id="cdCenterPanelTp" title="${_t('waypoints.teleport_title')}"
         style="background:rgba(100,160,255,.14);border:1px solid rgba(100,160,255,.45);
         color:#80b4ff;font:11px 'Segoe UI';padding:4px 8px;border-radius:4px;
         cursor:pointer;width:100%">
-        Teleportar
+        ${_t('waypoints.teleport_btn')}
       </button>
     `;
     document.body.appendChild(el);
@@ -111,8 +111,10 @@
     const promptFn = (doc && doc.defaultView && doc.defaultView.prompt)
       ? doc.defaultView.prompt.bind(doc.defaultView)
       : prompt;
-    const name = promptFn('Nome do waypoint:', lastPos
-      ? `${lastPos.realm === 'abyss' ? '[Abyss] ' : ''}${Math.round(lastPos.x)}, ${Math.round(lastPos.z)}`
+    const name = promptFn(_t('waypoints.prompt_name'), lastPos
+      ? (lastPos.realm === 'abyss'
+          ? _t('waypoints.default_name_abyss').replace('{0}', Math.round(lastPos.x)).replace('{1}', Math.round(lastPos.z))
+          : _t('waypoints.default_name').replace('{0}', Math.round(lastPos.x)).replace('{1}', Math.round(lastPos.z)))
       : 'Waypoint');
     if (name !== null) {
       _wpPendingFocusLast = true;
@@ -260,7 +262,7 @@
         <html>
         <head>
           <meta charset="utf-8">
-          <title>CD Waypoints</title>
+          <title>${_t('waypoints.window_title')}</title>
           <style>
             html,body{
               margin:0;width:100%;height:100%;overflow:hidden;
@@ -304,10 +306,10 @@
         <body>
           <div class="wrap">
             <div class="row">
-              <div class="title">Waypoints</div>
-              <button id="cdWpPopupSave" class="btn">+ Salvar</button>
+              <div class="title">${_t('waypoints.title')}</div>
+              <button id="cdWpPopupSave" class="btn">${_t('waypoints.save')}</button>
             </div>
-            <input id="cdWpPopupFilter" class="filter" placeholder="Filtrar waypoints">
+            <input id="cdWpPopupFilter" class="filter" placeholder="${_t('waypoints.filter_placeholder')}">
             <div id="cdWpPopupList" class="list"></div>
           </div>
         </body>
@@ -337,14 +339,14 @@
       display:none;flex-direction:column;gap:5px;overflow:hidden;`;
     el.innerHTML = `
       <div style="display:flex;align-items:center;gap:6px">
-        <span style="color:#ffd060;font-weight:600;flex:1;font-size:12px">⭕ Waypoints</span>
-        <button id="cdWpSave" title="Save current position"
+        <span style="color:#ffd060;font-weight:600;flex:1;font-size:12px">⭕ ${_t('waypoints.title')}</span>
+        <button id="cdWpSave" title="${_t('waypoints.save_btn_title')}"
           style="background:rgba(255,208,96,.15);border:1px solid rgba(255,208,96,.4);
           color:#ffd060;font:11px 'Segoe UI';padding:2px 8px;border-radius:4px;cursor:pointer">
-          + Salvar
+          ${_t('waypoints.save')}
         </button>
       </div>
-      <input id="cdWpFilter" placeholder="Filtrar waypoints"
+      <input id="cdWpFilter" placeholder="${_t('waypoints.filter_placeholder')}"
         style="width:100%;background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.12);
         color:#e8e8e8;font:11px 'Segoe UI';padding:4px 7px;border-radius:4px;outline:none">
       <div id="cdWpList" style="overflow-y:auto;max-height:170px;display:flex;
@@ -354,8 +356,10 @@
 
     document.getElementById('cdWpFilter').addEventListener('input', (e) => setWaypointFilter(e.target.value));
     document.getElementById('cdWpSave').addEventListener('click', () => {
-      const name = prompt('Nome do waypoint:', lastPos
-        ? `${lastPos.realm === 'abyss' ? '[Abyss] ' : ''}${Math.round(lastPos.x)}, ${Math.round(lastPos.z)}`
+      const name = prompt(_t('waypoints.prompt_name'), lastPos
+        ? (lastPos.realm === 'abyss'
+            ? _t('waypoints.default_name_abyss').replace('{0}', Math.round(lastPos.x)).replace('{1}', Math.round(lastPos.z))
+            : _t('waypoints.default_name').replace('{0}', Math.round(lastPos.x)).replace('{1}', Math.round(lastPos.z)))
         : 'Waypoint');
       if (name !== null) sendCmd({ cmd: 'save_waypoint', name });
     });
@@ -395,7 +399,7 @@
     if (!list) return;
     if (waypoints.length === 0) {
       list.innerHTML = `<div style="color:#555;font-size:11px;text-align:center;padding:4px 0">
-        Nenhum waypoint salvo</div>`;
+        ${_t('waypoints.empty')}</div>`;
       return;
     }
     const items = waypoints
@@ -403,7 +407,7 @@
       .filter(item => matchesWaypointFilter(item.wp));
     if (items.length === 0) {
       list.innerHTML = `<div style="color:#555;font-size:11px;text-align:center;padding:4px 0">
-        Nenhum waypoint encontrado</div>`;
+        ${_t('waypoints.not_found')}</div>`;
       return;
     }
     list.innerHTML = items.map(({ wp, i }) => `
@@ -411,11 +415,11 @@
         border-radius:4px;padding:3px 6px;">
         <span style="flex:1;font-size:11px;white-space:nowrap;overflow:hidden;
           text-overflow:ellipsis;color:#ccc" title="${wp.name}">${wp.name}</span>
-        <button data-tp="${i}" title="Teleportar"
+        <button data-tp="${i}" title="${_t('waypoints.teleport_title')}"
           style="background:rgba(255,208,96,.15);border:1px solid rgba(255,208,96,.35);
           color:#ffd060;font:10px 'Segoe UI';padding:1px 5px;border-radius:3px;
-          cursor:pointer;flex-shrink:0">⭕</button>
-        <button data-del="${i}" title="Remover"
+          cursor:pointer;flex-shrink:0">${_t('waypoints.teleport_btn')}</button>
+        <button data-del="${i}" title="${_t('waypoints.delete_btn_title')}"
           style="background:transparent;border:none;color:#555;font:12px monospace;
           cursor:pointer;padding:0 2px;flex-shrink:0">✕</button>
       </div>

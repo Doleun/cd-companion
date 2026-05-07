@@ -1,3 +1,9 @@
+## v0.10.00
+
+### Added
+- Language support: the overlay UI is now fully translated. Switch between English and Português (Brasil) in Settings > Window > Language.
+- Community translations can be added by placing a JSON file in a `locales/` folder next to the exe — no rebuild required. See `overlay/locales/README.md` for the format.
+
 ## v0.09.02
 
 ### Fixed

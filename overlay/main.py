@@ -32,6 +32,7 @@ from PyQt5.QtWidgets import (QApplication, QMainWindow, QWidget,
 from PyQt5.QtWebEngineWidgets import QWebEngineView, QWebEnginePage
 
 from overlay.config_defaults import SETTING_DEFAULTS
+import overlay.i18n as i18n
 from overlay.mapgenie_patch import (
     install_mapgenie_patch,
     register_mapgenie_patch_scheme,
@@ -209,6 +210,9 @@ class _ResizeRingOverlay(QWidget):
 class OverlayWindow(QMainWindow):
     def __init__(self, cfg, screen_w, screen_h):
         super().__init__()
+
+        # Inicializa o subsistema de i18n antes de qualquer widget ser criado
+        i18n.init(_APP_DIR, cfg.get('language', 'en'))
 
         w   = cfg.get('width',  DEFAULT_W)
         h   = cfg.get('height', DEFAULT_H)
@@ -638,6 +642,10 @@ class OverlayWindow(QMainWindow):
             self._view.setZoomFactor(zoom / 100.0)
 
     def _apply_settings_js(self, settings):
+        # Atualiza locale e inclui dicionário i18n no payload
+        if i18n._instance:
+            i18n._instance.set_locale(settings.get('language', 'en'))
+            settings['i18n'] = i18n._instance.get_dict()
         # Só atualiza a variável — os auto-hides de painel só devem rodar
         # no carregamento da página (via _on_load_finished), não ao salvar.
         self._view.page().runJavaScript(
@@ -658,6 +666,7 @@ class OverlayWindow(QMainWindow):
             zoom = settings.get('browserZoom', 100)
             self._view.setZoomFactor(zoom / 100.0)
 
+            settings['i18n'] = i18n._instance.get_dict() if i18n._instance else {}
             self._view.page().runJavaScript(
                 f'window.__cdSettings = {json.dumps(settings)};'
                 f'window.__cdNativeRealtimeEnabled = '
@@ -861,7 +870,7 @@ def _show_mode_selector(current_mode):
     chosen = [None]
 
     dlg = QDialog()
-    dlg.setWindowTitle('CD Companion - Mode')
+    dlg.setWindowTitle(i18n.t('mode.title'))
     dlg.setWindowFlags(Qt.WindowCloseButtonHint | Qt.WindowStaysOnTopHint)
     dlg.setFixedSize(380, 180)
     dlg.setStyleSheet(
@@ -874,14 +883,12 @@ def _show_mode_selector(current_mode):
     layout.setSpacing(14)
     layout.setContentsMargins(24, 20, 24, 20)
 
-    title = QLabel('Choose overlay mode')
+    title = QLabel(i18n.t('mode.choose'))
     title.setStyleSheet('font:bold 15px "Segoe UI";color:#ffd060;')
     title.setAlignment(Qt.AlignCenter)
     layout.addWidget(title)
 
-    desc = QLabel(
-        '<b>Full</b> - map overlay with all features<br>'
-        '<b>Server Only</b> - no window, only WebSocket + hotkeys (saves ~300 MB RAM)')
+    desc = QLabel(i18n.t('mode.description'))
     desc.setStyleSheet('font:11px "Segoe UI";color:#94a3b8;')
     desc.setWordWrap(True)
     desc.setAlignment(Qt.AlignCenter)
@@ -890,14 +897,14 @@ def _show_mode_selector(current_mode):
     btn_row = QHBoxLayout()
     btn_row.setSpacing(12)
 
-    btn_full = QPushButton('Full')
+    btn_full = QPushButton(i18n.t('mode.btn_full'))
     btn_full.setStyleSheet(
         'QPushButton{background:rgba(96,184,255,.15);border:1.5px solid rgba(96,184,255,.5);'
         'color:#60b8ff;}'
         'QPushButton:hover{background:rgba(96,184,255,.3);}')
     btn_full.clicked.connect(lambda: (chosen.__setitem__(0, 'full'), dlg.accept()))
 
-    btn_server = QPushButton('Server Only')
+    btn_server = QPushButton(i18n.t('mode.btn_server_only'))
     btn_server.setStyleSheet(
         'QPushButton{background:rgba(255,208,96,.12);border:1.5px solid rgba(255,208,96,.45);'
         'color:#ffd060;}'
@@ -948,6 +955,9 @@ def main():
         os.environ['CD_USE_SHARED_MEMORY_ENTITY'] = '0'
 
     overlay_mode = cfg.get('overlayMode', 'full')
+
+    # ── Inicializa i18n antes de qualquer diálogo ─────────────────────
+    i18n.init(app_dir, cfg.get('language', 'en'))
 
     # ── Seletor de modo na inicialização ──────────────────────────────
     # Mostra um dialog leve para o usuário escolher o modo de operação.
