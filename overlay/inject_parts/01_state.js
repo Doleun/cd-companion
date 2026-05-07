@@ -38,3 +38,9 @@
   document.addEventListener('keydown', (e) => { if (e.key === 'Shift') shiftHeld = true;  });
   document.addEventListener('keyup',   (e) => { if (e.key === 'Shift') shiftHeld = false; });
 
+  function _t(key) {
+    const dict = window.__cdSettings && window.__cdSettings.i18n;
+    if (!dict || typeof dict[key] === 'undefined') return key;
+    return dict[key];
+  }
+

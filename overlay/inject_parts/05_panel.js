@@ -17,7 +17,7 @@
     // Botão expand/collapse (abre o painel completo)
     const expand = document.createElement('button');
     expand.id = 'cdOvExpandBtn';
-    expand.title = 'Expandir painel';
+    expand.title = _t('panel.expand');
     expand.textContent = '⊞';
     expand.style.cssText = `width:28px;height:36px;border-radius:6px;
       background:rgba(12,12,18,.9);border:1px solid rgba(255,208,96,.25);
@@ -32,18 +32,19 @@
       const visible = panel.style.display !== 'none';
       panel.style.display = visible ? 'none' : 'block';
       expand.textContent = visible ? '⊞' : '⊟';
+      expand.title = visible ? _t('panel.expand') : _t('panel.collapse');
     });
 
     // Botão follow (sempre visível, reflete estado)
     const followBtn = document.createElement('button');
     followBtn.id = 'cdOvFollowFloat';
-    followBtn.title = 'Toggle Follow';
+    followBtn.title = _t('panel.toggle_follow');
     followBtn.style.cssText = `height:36px;padding:0 12px;border-radius:6px;
       background:rgba(12,30,20,.95);border:1.5px solid rgba(80,220,120,.6);
       color:#60e890;font:bold 11px 'Segoe UI',sans-serif;cursor:pointer;
       box-shadow:0 3px 12px rgba(0,0,0,.6);backdrop-filter:blur(6px);
       white-space:nowrap;transition:background .15s,border-color .15s,color .15s`;
-    followBtn.textContent = '🗺 Follow: ON';
+    followBtn.textContent = _t('panel.follow_on');
     followBtn.addEventListener('click', toggleFollow);
 
     bar.appendChild(expand);
@@ -64,18 +65,18 @@
       box-shadow:0 4px 18px rgba(0,0,0,.5);user-select:none;display:none`;
     el.innerHTML = `
       <div id="cdOvCoords" style="font:11px/1.5 Consolas,monospace;color:#bbb;margin-bottom:2px">--</div>
-      <div id="cdOvStatus" style="font-size:10px;color:#e07070">Connecting…</div>
+      <div id="cdOvStatus" style="font-size:10px;color:#e07070">${_t('panel.connecting')}</div>
       <div id="cdOvTeleportRow" style="display:flex;gap:4px;margin-top:5px${teleportEnabled ? '' : ';display:none'}">
         <button id="cdOvMarker" title="Teleport to in-game map marker"
           style="flex:1;background:rgba(100,160,255,.15);border:1px solid rgba(100,160,255,.4);
           color:#80b4ff;font:10px 'Segoe UI';padding:3px 5px;border-radius:4px;cursor:pointer">
-          📍 Go to Marker
+          ${_t('panel.go_to_marker')}
         </button>
         <button id="cdOvAbort" title="Return to position before last teleport"
           style="flex:1;background:rgba(255,100,100,.12);border:1px solid rgba(255,100,100,.35);
           color:#ff8080;font:10px 'Segoe UI';padding:3px 5px;border-radius:4px;
           cursor:pointer;opacity:.35;pointer-events:none">
-          ↩ Abort
+          ${_t('panel.abort')}
         </button>
       </div>
     `;
@@ -99,8 +100,8 @@
     const followFloat = document.getElementById('cdOvFollowFloat');
     if (followFloat) {
       const isRound = !!(window.__cdSettings && window.__cdSettings.roundWindow);
-      followFloat.textContent  = isRound ? 'F' : `🗺 Follow: ${following ? 'ON' : 'OFF'}`;
-      followFloat.title = `Toggle Follow (${following ? 'ON' : 'OFF'})`;
+      followFloat.textContent  = isRound ? _t('panel.follow_short') : (following ? _t('panel.follow_on') : _t('panel.follow_off'));
+      followFloat.title = _t('panel.toggle_follow_state').replace('{0}', following ? 'ON' : 'OFF');
       followFloat.style.background  = following ? 'rgba(12,30,20,.95)'  : 'rgba(30,20,0,.95)';
       followFloat.style.borderColor = following ? 'rgba(80,220,120,.6)' : 'rgba(255,208,96,.6)';
       followFloat.style.color       = following ? '#60e890' : '#ffd060';
@@ -115,8 +116,8 @@
     if (status) {
       const ok = ws && ws.readyState === 1;
       status.textContent = ok
-        ? (lastPos ? `Realm: ${lastPos.realm}` : 'Move the character to start')
-        : 'Server offline';
+        ? (lastPos ? _t('panel.realm').replace('{0}', lastPos.realm) : _t('panel.move_to_start'))
+        : _t('panel.server_offline');
       status.style.color = ok ? '#60e890' : '#e07070';
     }
     if (abort) {

@@ -1,6 +1,7 @@
 """Constantes de configuração compartilhadas entre overlay_app.py e overlay_widgets.py."""
 
 SETTING_DEFAULTS = {
+    'language':             'en',
     'restoreLastPosition':  True,
     'autoHideFound':        True,
     'autoHideLeftSidebar':  False,

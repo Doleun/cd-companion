@@ -20,6 +20,7 @@ from PyQt5.QtWebEngineWidgets import QWebEngineView, QWebEnginePage
 
 # Importa SETTING_DEFAULTS do módulo de configuração
 from overlay.config_defaults import SETTING_DEFAULTS
+import overlay.i18n as i18n
 
 try:
     from server.main import (
@@ -216,7 +217,7 @@ QSlider::sub-page:horizontal { background:#ffd060; border-radius:2px; }
 class SettingsDialog(QDialog):
     def __init__(self, cfg, parent=None):
         super().__init__(parent)
-        self.setWindowTitle('Settings')
+        self.setWindowTitle(i18n.t('settings.title'))
         self.setWindowFlags(
             (self.windowFlags() | Qt.WindowStaysOnTopHint)
             & ~Qt.WindowContextHelpButtonHint
@@ -315,19 +316,19 @@ class SettingsDialog(QDialog):
         # TAB: Map
         # ══════════════════════════════════════════════════════════════
         map_scroll, map_layout = _make_tab_scroll()
-        tabs.addTab(map_scroll, 'Map')
+        tabs.addTab(map_scroll, i18n.t('settings.tab_map'))
 
-        section('On map load', map_layout)
-        option('restoreLastPosition', 'Restore last position',
-               'Returns to the location and zoom from your last visit')
-        option('autoHideFound', 'Hide Found Locations',
-               'Automatically disables "Found Locations" when the map opens')
-        option('autoHideLeftSidebar', 'Hide Left Panel',
-               'Automatically closes the left sidebar')
-        option('autoHideRightSidebar', 'Hide Right Panel',
-               'Automatically closes the right sidebar')
+        section(i18n.t('settings.section_on_map_load'), map_layout)
+        option('restoreLastPosition', i18n.t('settings.option_restore_last_position'),
+               i18n.t('settings.option_restore_last_position_desc'))
+        option('autoHideFound', i18n.t('settings.option_auto_hide_found'),
+               i18n.t('settings.option_auto_hide_found_desc'))
+        option('autoHideLeftSidebar', i18n.t('settings.option_auto_hide_left_sidebar'),
+               i18n.t('settings.option_auto_hide_left_sidebar_desc'))
+        option('autoHideRightSidebar', i18n.t('settings.option_auto_hide_right_sidebar'),
+               i18n.t('settings.option_auto_hide_right_sidebar_desc'))
 
-        section('Map icons', map_layout)
+        section(i18n.t('settings.section_map_icons'), map_layout)
         self._map_icon_scale_val = QLabel()
         self._map_icon_scale_val.setStyleSheet(
             "color:#ffd060; font:13px 'Consolas'; min-width:40px;")
@@ -342,8 +343,8 @@ class SettingsDialog(QDialog):
 
         _on_icon_scale(self._map_icon_scale.value())
         self._map_icon_scale.valueChanged.connect(_on_icon_scale)
-        slider_block('Icon scale', self._map_icon_scale_val, self._map_icon_scale,
-                     'Scales location markers while keeping automatic zoom-based sizing.')
+        slider_block(i18n.t('settings.slider_icon_scale'), self._map_icon_scale_val, self._map_icon_scale,
+                     i18n.t('settings.slider_icon_scale_desc'))
 
         map_layout.addStretch(1)
 
@@ -351,15 +352,44 @@ class SettingsDialog(QDialog):
         # TAB: Window
         # ══════════════════════════════════════════════════════════════
         win_scroll, win_layout = _make_tab_scroll()
-        tabs.addTab(win_scroll, 'Window')
+        tabs.addTab(win_scroll, i18n.t('settings.tab_window'))
 
-        section('Window', win_layout)
-        option('roundWindow', 'Circular/oval window',
-               'Applies an elliptical mask to the window')
-        option('followGameWindow', 'Follow game window',
-               'Moves the overlay automatically when the game window is moved')
-        option('alwaysShowTitleBar', 'Always show title bar',
-               'Keeps the title bar always visible instead of showing only on mouse hover (square mode only)')
+        section(i18n.t('settings.section_language'), win_layout)
+        active_layout[0].addWidget(QLabel(i18n.t('settings.language_label')))
+        self._lang_combo = QComboBox()
+        self._lang_combo.setFixedHeight(32)
+        self._lang_combo.setStyleSheet(
+            "QComboBox{background:#e2e8f0;color:#111827;border:1px solid #64748b;"
+            "border-radius:6px;padding:4px 30px 4px 8px;}"
+            "QComboBox:focus{border:1px solid #ffd060;}"
+            "QComboBox::drop-down{subcontrol-origin:padding;subcontrol-position:top right;"
+            "width:24px;border-left:1px solid #94a3b8;background:#cbd5e1;"
+            "border-top-right-radius:6px;border-bottom-right-radius:6px;}"
+            "QComboBox::down-arrow{image:none;width:0;height:0;"
+            "border-left:4px solid transparent;border-right:4px solid transparent;"
+            "border-top:5px solid #1f2937;}"
+            "QComboBox QAbstractItemView{background:#f8fafc;color:#111827;"
+            "selection-background-color:#ffd060;selection-color:#111827;"
+            "border:1px solid #475569;}")
+        if i18n._instance is not None:
+            lang_entries = i18n._instance.list_available()
+        else:
+            lang_entries = [{'code': 'en', 'name': 'English'}]
+        for entry in lang_entries:
+            self._lang_combo.addItem(entry['name'], entry['code'])
+        current_lang = cfg.get('language', 'en')
+        lang_idx = self._lang_combo.findData(current_lang)
+        if lang_idx >= 0:
+            self._lang_combo.setCurrentIndex(lang_idx)
+        active_layout[0].addWidget(self._lang_combo)
+
+        section(i18n.t('settings.section_window'), win_layout)
+        option('roundWindow', i18n.t('settings.option_round_window'),
+               i18n.t('settings.option_round_window_desc'))
+        option('followGameWindow', i18n.t('settings.option_follow_game_window'),
+               i18n.t('settings.option_follow_game_window_desc'))
+        option('alwaysShowTitleBar', i18n.t('settings.option_always_show_title_bar'),
+               i18n.t('settings.option_always_show_title_bar_desc'))
 
         transp_val = QLabel(f'{cfg.get("transparency", SETTING_DEFAULTS["transparency"])}%')
         transp_val.setStyleSheet('color:#ffd060; font:12px "Segoe UI"; min-width:32px;')
@@ -374,7 +404,7 @@ class SettingsDialog(QDialog):
                 parent.setWindowOpacity(1.0 - v / 100)
 
         self._slider.valueChanged.connect(on_slider)
-        slider_block('Transparency', transp_val, self._slider)
+        slider_block(i18n.t('settings.slider_transparency'), transp_val, self._slider)
 
         # Browser zoom
         zoom_val = QLabel(f'{cfg.get("browserZoom", SETTING_DEFAULTS["browserZoom"])}%')
@@ -394,12 +424,12 @@ class SettingsDialog(QDialog):
             zoom_val.setText(f'{v}%')
 
         self._zoom_slider.valueChanged.connect(on_zoom)
-        slider_block('Browser zoom', zoom_val, self._zoom_slider,
-                     'Zoom level of the map page. Applied immediately on save.')
+        slider_block(i18n.t('settings.slider_browser_zoom'), zoom_val, self._zoom_slider,
+                     i18n.t('settings.slider_browser_zoom_desc'))
 
         # Show/hide overlay hotkey
-        section('Show / hide overlay', win_layout)
-        to_hk_lbl = QLabel('Keyboard hotkey')
+        section(i18n.t('settings.section_show_hide_overlay'), win_layout)
+        to_hk_lbl = QLabel(i18n.t('settings.keyboard_hotkey_label'))
         self._to_hk = QKeySequenceEdit()
         self._to_hk.setFixedHeight(32)
         self._to_hk.setAttribute(Qt.WA_StyledBackground, True)
@@ -413,7 +443,7 @@ class SettingsDialog(QDialog):
             _to_hk_line.setStyleSheet(
                 "QLineEdit{background:#e2e8f0;color:#111827;border:none;"
                 "selection-background-color:#ffd060;selection-color:#111827;}")
-        self._to_hk.setToolTip('Restart overlay for the new hotkey to take effect')
+        self._to_hk.setToolTip(i18n.t('settings.hotkey_restart_tooltip'))
         self._to_hk._hk_finalized = False
 
         def _to_on_seq_changed(seq):
@@ -456,7 +486,7 @@ class SettingsDialog(QDialog):
         to_hk_row_layout.setContentsMargins(0, 0, 0, 0)
         to_hk_row_layout.setSpacing(6)
         to_hk_row_layout.addWidget(self._to_hk)
-        to_hk_clear_btn = QPushButton('Clear')
+        to_hk_clear_btn = QPushButton(i18n.t('settings.btn_clear'))
         to_hk_clear_btn.setFixedHeight(32)
         to_hk_clear_btn.setStyleSheet(
             "QPushButton{background:rgba(255,80,80,.15);border:1px solid rgba(255,80,80,.4);"
@@ -468,7 +498,7 @@ class SettingsDialog(QDialog):
         active_layout[0].addWidget(to_hk_row)
 
         if _HAS_CONTROLLER_HOTKEYS:
-            active_layout[0].addWidget(QLabel('Controller combo'))
+            active_layout[0].addWidget(QLabel(i18n.t('settings.controller_combo_label')))
             to_ctrl_row = QWidget()
             to_ctrl_row_layout = QHBoxLayout(to_ctrl_row)
             to_ctrl_row_layout.setContentsMargins(0, 0, 0, 0)
@@ -481,7 +511,7 @@ class SettingsDialog(QDialog):
             self._to_ctrl_display.setStyleSheet(
                 "QLineEdit{background:#e2e8f0;color:#111827;border:1px solid #64748b;"
                 "border-radius:6px;padding:4px 8px;}")
-            self._to_ctrl_record_btn = QPushButton('Record')
+            self._to_ctrl_record_btn = QPushButton(i18n.t('settings.btn_record'))
             self._to_ctrl_record_btn.setFixedHeight(32)
             self._to_ctrl_record_btn.setStyleSheet(
                 "QPushButton{background:rgba(255,208,96,.18);"
@@ -489,7 +519,7 @@ class SettingsDialog(QDialog):
                 "color:#ffd060;border-radius:6px;padding:0 10px;}"
                 "QPushButton:hover{background:rgba(255,208,96,.3);}"
                 "QPushButton:disabled{color:#666;border-color:#444;background:#222;}")
-            _to_ctrl_clear_btn = QPushButton('Clear')
+            _to_ctrl_clear_btn = QPushButton(i18n.t('settings.btn_clear'))
             _to_ctrl_clear_btn.setFixedHeight(32)
             _to_ctrl_clear_btn.setStyleSheet(
                 "QPushButton{background:rgba(255,80,80,.15);border:1px solid rgba(255,80,80,.4);"
@@ -497,7 +527,7 @@ class SettingsDialog(QDialog):
                 "QPushButton:hover{background:rgba(255,80,80,.3);}")
 
             def _to_ctrl_clear():
-                self._to_ctrl_display.setText('None')
+                self._to_ctrl_display.setText(i18n.t('settings.display_none'))
                 try:
                     existing = _load_controller_hotkey_settings()
                     existing["toggle_overlay"] = 0
@@ -524,7 +554,7 @@ class SettingsDialog(QDialog):
                     saved_mask = self._to_ctrl_peak_mask
                     self._to_ctrl_timer.stop()
                     self._to_ctrl_recording = False
-                    self._to_ctrl_record_btn.setText('Record')
+                    self._to_ctrl_record_btn.setText(i18n.t('settings.btn_record'))
                     self._to_ctrl_record_btn.setEnabled(True)
                     self._to_ctrl_display.setText(mask_to_name(saved_mask))
                     if _set_controller_hotkey_paused:
@@ -544,7 +574,7 @@ class SettingsDialog(QDialog):
                 self._to_ctrl_recording = True
                 self._to_ctrl_peak_mask = 0
                 self._to_ctrl_display.setFocus()
-                self._to_ctrl_record_btn.setText('Recording...')
+                self._to_ctrl_record_btn.setText(i18n.t('settings.btn_recording'))
                 self._to_ctrl_record_btn.setEnabled(False)
                 if _set_controller_hotkey_paused:
                     _set_controller_hotkey_paused(True)
@@ -552,14 +582,14 @@ class SettingsDialog(QDialog):
 
             self._to_ctrl_record_btn.clicked.connect(_to_start_record)
 
-        to_note = QLabel('Shows or hides the overlay window. Keyboard change requires restart.')
+        to_note = QLabel(i18n.t('settings.note_toggle_overlay'))
         to_note.setWordWrap(True)
         to_note.setStyleSheet('color:#64748b; font:11px "Segoe UI"; margin-top:-4px;')
         active_layout[0].addWidget(to_note)
 
         # Focus toggle hotkey
-        section('Focus toggle', win_layout)
-        ft_hk_lbl = QLabel('Keyboard hotkey')
+        section(i18n.t('settings.section_focus_toggle'), win_layout)
+        ft_hk_lbl = QLabel(i18n.t('settings.keyboard_hotkey_label'))
         self._focus_toggle_hk = QKeySequenceEdit()
         self._focus_toggle_hk.setFixedHeight(32)
         self._focus_toggle_hk.setAttribute(Qt.WA_StyledBackground, True)
@@ -573,7 +603,7 @@ class SettingsDialog(QDialog):
             ft_hk_line.setStyleSheet(
                 "QLineEdit{background:#e2e8f0;color:#111827;border:none;"
                 "selection-background-color:#ffd060;selection-color:#111827;}")
-        self._focus_toggle_hk.setToolTip('Restart overlay for the new hotkey to take effect')
+        self._focus_toggle_hk.setToolTip(i18n.t('settings.hotkey_restart_tooltip'))
         self._focus_toggle_hk._hk_finalized = False
 
         def _ft_on_seq_changed(seq):
@@ -616,7 +646,7 @@ class SettingsDialog(QDialog):
         ft_hk_row_layout.setContentsMargins(0, 0, 0, 0)
         ft_hk_row_layout.setSpacing(6)
         ft_hk_row_layout.addWidget(self._focus_toggle_hk)
-        ft_hk_clear_btn = QPushButton('Clear')
+        ft_hk_clear_btn = QPushButton(i18n.t('settings.btn_clear'))
         ft_hk_clear_btn.setFixedHeight(32)
         ft_hk_clear_btn.setStyleSheet(
             "QPushButton{background:rgba(255,80,80,.15);border:1px solid rgba(255,80,80,.4);"
@@ -629,7 +659,7 @@ class SettingsDialog(QDialog):
 
         # Focus toggle controller combo
         if _HAS_CONTROLLER_HOTKEYS:
-            active_layout[0].addWidget(QLabel('Controller combo'))
+            active_layout[0].addWidget(QLabel(i18n.t('settings.controller_combo_label')))
             ft_ctrl_row = QWidget()
             ft_ctrl_row_layout = QHBoxLayout(ft_ctrl_row)
             ft_ctrl_row_layout.setContentsMargins(0, 0, 0, 0)
@@ -642,7 +672,7 @@ class SettingsDialog(QDialog):
             self._ft_ctrl_display.setStyleSheet(
                 "QLineEdit{background:#e2e8f0;color:#111827;border:1px solid #64748b;"
                 "border-radius:6px;padding:4px 8px;}")
-            self._ft_ctrl_record_btn = QPushButton('Record')
+            self._ft_ctrl_record_btn = QPushButton(i18n.t('settings.btn_record'))
             self._ft_ctrl_record_btn.setFixedHeight(32)
             self._ft_ctrl_record_btn.setStyleSheet(
                 "QPushButton{background:rgba(255,208,96,.18);"
@@ -650,7 +680,7 @@ class SettingsDialog(QDialog):
                 "color:#ffd060;border-radius:6px;padding:0 10px;}"
                 "QPushButton:hover{background:rgba(255,208,96,.3);}"
                 "QPushButton:disabled{color:#666;border-color:#444;background:#222;}")
-            _ft_ctrl_clear_btn = QPushButton('Clear')
+            _ft_ctrl_clear_btn = QPushButton(i18n.t('settings.btn_clear'))
             _ft_ctrl_clear_btn.setFixedHeight(32)
             _ft_ctrl_clear_btn.setStyleSheet(
                 "QPushButton{background:rgba(255,80,80,.15);border:1px solid rgba(255,80,80,.4);"
@@ -658,7 +688,7 @@ class SettingsDialog(QDialog):
                 "QPushButton:hover{background:rgba(255,80,80,.3);}")
 
             def _ft_ctrl_clear():
-                self._ft_ctrl_display.setText('None')
+                self._ft_ctrl_display.setText(i18n.t('settings.display_none'))
                 try:
                     existing = _load_controller_hotkey_settings()
                     existing["focus_toggle"] = 0
@@ -672,7 +702,7 @@ class SettingsDialog(QDialog):
             ft_ctrl_row_layout.addWidget(_ft_ctrl_clear_btn)
             active_layout[0].addWidget(ft_ctrl_row)
 
-            ft_note = QLabel('Toggles focus between Crimson Desert and the overlay map. Restart required.')
+            ft_note = QLabel(i18n.t('settings.note_focus_toggle'))
             ft_note.setWordWrap(True)
             ft_note.setStyleSheet('color:#64748b; font:11px "Segoe UI"; margin-top:-4px;')
             active_layout[0].addWidget(ft_note)
@@ -690,7 +720,7 @@ class SettingsDialog(QDialog):
                     saved_mask = self._ft_ctrl_peak_mask
                     self._ft_ctrl_timer.stop()
                     self._ft_ctrl_recording = False
-                    self._ft_ctrl_record_btn.setText('Record')
+                    self._ft_ctrl_record_btn.setText(i18n.t('settings.btn_record'))
                     self._ft_ctrl_record_btn.setEnabled(True)
                     self._ft_ctrl_display.setText(mask_to_name(saved_mask))
                     if _set_controller_hotkey_paused:
@@ -710,7 +740,7 @@ class SettingsDialog(QDialog):
                 self._ft_ctrl_recording = True
                 self._ft_ctrl_peak_mask = 0
                 self._ft_ctrl_display.setFocus()
-                self._ft_ctrl_record_btn.setText('Recording...')
+                self._ft_ctrl_record_btn.setText(i18n.t('settings.btn_recording'))
                 self._ft_ctrl_record_btn.setEnabled(False)
                 if _set_controller_hotkey_paused:
                     _set_controller_hotkey_paused(True)
@@ -724,16 +754,13 @@ class SettingsDialog(QDialog):
         # TAB: Teleport
         # ══════════════════════════════════════════════════════════════
         tp_scroll, tp_layout = _make_tab_scroll()
-        tabs.addTab(tp_scroll, 'Teleport')
+        tabs.addTab(tp_scroll, i18n.t('settings.tab_teleport'))
 
-        section('Teleport', tp_layout)
-        option('teleportEnabled', 'Enable teleport (restart overlay and game)',
-               'When disabled, the physics delta hook (hook_e) and invulnerability hook (hook_c) '
-               'are not injected into the game. Useful to avoid conflicts with other mods.')
-        option('useSharedMemoryEntity', 'Use Freedom Flyer shared memory',
-               'Reads player entity base from Freedom Flyer shared memory instead of installing '
-               'an entity hook (hook_a). Reduces hook conflicts when using both mods together. '
-               'Disable if not using Freedom Flyer and experiencing entity detection issues.')
+        section(i18n.t('settings.section_teleport'), tp_layout)
+        option('teleportEnabled', i18n.t('settings.option_teleport_enabled'),
+               i18n.t('settings.option_teleport_enabled_desc'))
+        option('useSharedMemoryEntity', i18n.t('settings.option_shared_memory'),
+               i18n.t('settings.option_shared_memory_desc'))
 
         self._center_y_value = QLabel()
         self._center_y_value.setStyleSheet(
@@ -744,13 +771,12 @@ class SettingsDialog(QDialog):
         self._center_y.setPageStep(100)
         self._center_y.setValue(int(float(cfg.get(
             'centerTeleportY', SETTING_DEFAULTS['centerTeleportY']))))
-        self._center_y.setToolTip(
-            'Absolute Y used when teleporting to the center of the screen')
+        self._center_y.setToolTip(i18n.t('settings.slider_center_tp_y_desc'))
         self._center_y_value.setText(str(self._center_y.value()))
         self._center_y.valueChanged.connect(
             lambda value: self._center_y_value.setText(str(value)))
-        slider_block('Center TP Y', self._center_y_value, self._center_y,
-                     'Absolute Y used when teleporting to the center of the screen')
+        slider_block(i18n.t('settings.slider_center_tp_y'), self._center_y_value, self._center_y,
+                     i18n.t('settings.slider_center_tp_y_desc'))
 
         tp_layout.addStretch(1)
 
@@ -758,18 +784,14 @@ class SettingsDialog(QDialog):
         # TAB: Nearby
         # ══════════════════════════════════════════════════════════════
         nb_scroll, nb_layout = _make_tab_scroll()
-        tabs.addTab(nb_scroll, 'Nearby')
+        tabs.addTab(nb_scroll, i18n.t('settings.tab_nearby'))
 
-        section('Nearby', nb_layout)
-        option('nearbyControlsEnabled', 'Enable nearby popup shortcuts',
-               'Shift+N or LB+Down opens the nearby popup. In the popup: Up/Down, W/S, or D-pad moves, '
-               'Enter, Space, or A toggles found, Esc or B closes.')
-        option('nearbyRespectMapVisibility', 'Respect MapGenie category visibility',
-               'When enabled, the nearby popup only shows locations from categories '
-               'currently visible on the MapGenie map.')
-        nearby_help = QLabel(
-            'LB+Down / Shift+N open. Up/Down, W/S, D-pad navigate. '
-            'Enter/Space/A toggles. Esc/B closes.')
+        section(i18n.t('settings.section_nearby'), nb_layout)
+        option('nearbyControlsEnabled', i18n.t('settings.option_nearby_controls_enabled'),
+               i18n.t('settings.option_nearby_controls_enabled_desc'))
+        option('nearbyRespectMapVisibility', i18n.t('settings.option_nearby_respect_map_visibility'),
+               i18n.t('settings.option_nearby_respect_map_visibility_desc'))
+        nearby_help = QLabel(i18n.t('settings.help_nearby_controls'))
         nearby_help.setWordWrap(True)
         nearby_help.setStyleSheet(
             'color:#7c8db5; font:11px "Segoe UI"; margin-left:26px; margin-top:-4px;')
@@ -786,11 +808,11 @@ class SettingsDialog(QDialog):
         self._nearby_radius_val.setText(str(self._nearby_radius.value()))
         self._nearby_radius.valueChanged.connect(
             lambda v: self._nearby_radius_val.setText(str(v)))
-        slider_block('Scan radius', self._nearby_radius_val, self._nearby_radius)
+        slider_block(i18n.t('settings.slider_nearby_radius'), self._nearby_radius_val, self._nearby_radius)
 
         # Nearby hotkey
-        section('Hotkey', nb_layout)
-        hk_lbl = QLabel('Open hotkey')
+        section(i18n.t('settings.section_hotkey'), nb_layout)
+        hk_lbl = QLabel(i18n.t('settings.open_hotkey_label'))
         self._nearby_hk = QKeySequenceEdit()
         self._nearby_hk.setFixedHeight(32)
         self._nearby_hk.setAttribute(Qt.WA_StyledBackground, True)
@@ -804,7 +826,7 @@ class SettingsDialog(QDialog):
             hk_line.setStyleSheet(
                 "QLineEdit{background:#e2e8f0;color:#111827;border:none;"
                 "selection-background-color:#ffd060;selection-color:#111827;}")
-        self._nearby_hk.setToolTip('Restart overlay for the new hotkey to take effect')
+        self._nearby_hk.setToolTip(i18n.t('settings.hotkey_restart_tooltip'))
         self._nearby_hk._hk_finalized = False
 
         def _on_seq_changed(seq):
@@ -850,7 +872,7 @@ class SettingsDialog(QDialog):
         nb_hk_row_layout.setContentsMargins(0, 0, 0, 0)
         nb_hk_row_layout.setSpacing(6)
         nb_hk_row_layout.addWidget(self._nearby_hk)
-        nb_hk_clear_btn = QPushButton('Clear')
+        nb_hk_clear_btn = QPushButton(i18n.t('settings.btn_clear'))
         nb_hk_clear_btn.setFixedHeight(32)
         nb_hk_clear_btn.setStyleSheet(
             "QPushButton{background:rgba(255,80,80,.15);border:1px solid rgba(255,80,80,.4);"
@@ -860,14 +882,14 @@ class SettingsDialog(QDialog):
         nb_hk_row_layout.addWidget(nb_hk_clear_btn)
         active_layout[0].addWidget(hk_lbl)
         active_layout[0].addWidget(nb_hk_row)
-        hk_note = QLabel('Restart required to apply hotkey change.')
+        hk_note = QLabel(i18n.t('settings.note_hotkey_restart'))
         hk_note.setStyleSheet('color:#64748b; font:11px "Segoe UI"; margin-top:-4px;')
         active_layout[0].addWidget(hk_note)
 
         # Nearby controller combo
         if _HAS_CONTROLLER_HOTKEYS:
-            section('Controller', nb_layout)
-            active_layout[0].addWidget(QLabel('Open combo'))
+            section(i18n.t('settings.section_controller'), nb_layout)
+            active_layout[0].addWidget(QLabel(i18n.t('settings.open_combo_label')))
             nb_ctrl_row = QWidget()
             nb_ctrl_row_layout = QHBoxLayout(nb_ctrl_row)
             nb_ctrl_row_layout.setContentsMargins(0, 0, 0, 0)
@@ -880,7 +902,7 @@ class SettingsDialog(QDialog):
             self._nb_ctrl_display.setStyleSheet(
                 "QLineEdit{background:#e2e8f0;color:#111827;border:1px solid #64748b;"
                 "border-radius:6px;padding:4px 8px;}")
-            self._nb_ctrl_record_btn = QPushButton('Record')
+            self._nb_ctrl_record_btn = QPushButton(i18n.t('settings.btn_record'))
             self._nb_ctrl_record_btn.setFixedHeight(32)
             self._nb_ctrl_record_btn.setStyleSheet(
                 "QPushButton{background:rgba(255,208,96,.18);"
@@ -890,7 +912,7 @@ class SettingsDialog(QDialog):
                 "QPushButton:disabled{color:#666;border-color:#444;background:#222;}")
             nb_ctrl_row_layout.addWidget(self._nb_ctrl_display)
             nb_ctrl_row_layout.addWidget(self._nb_ctrl_record_btn)
-            _nb_ctrl_clear_btn = QPushButton('Clear')
+            _nb_ctrl_clear_btn = QPushButton(i18n.t('settings.btn_clear'))
             _nb_ctrl_clear_btn.setFixedHeight(32)
             _nb_ctrl_clear_btn.setStyleSheet(
                 "QPushButton{background:rgba(255,80,80,.15);border:1px solid rgba(255,80,80,.4);"
@@ -898,7 +920,7 @@ class SettingsDialog(QDialog):
                 "QPushButton:hover{background:rgba(255,80,80,.3);}")
 
             def _nb_ctrl_clear():
-                self._nb_ctrl_display.setText('None')
+                self._nb_ctrl_display.setText(i18n.t('settings.display_none'))
                 try:
                     existing = _load_controller_hotkey_settings()
                     existing["open_nearby"] = 0
@@ -909,8 +931,7 @@ class SettingsDialog(QDialog):
             _nb_ctrl_clear_btn.clicked.connect(_nb_ctrl_clear)
             nb_ctrl_row_layout.addWidget(_nb_ctrl_clear_btn)
             active_layout[0].addWidget(nb_ctrl_row)
-            nb_ctrl_note = QLabel(
-                'Hold button combo on controller, then release. Restart required.')
+            nb_ctrl_note = QLabel(i18n.t('settings.note_controller_combo'))
             nb_ctrl_note.setWordWrap(True)
             nb_ctrl_note.setStyleSheet(
                 'color:#64748b; font:11px "Segoe UI"; margin-top:-4px;')
@@ -929,7 +950,7 @@ class SettingsDialog(QDialog):
                     saved_mask = self._nb_ctrl_peak_mask
                     self._nb_ctrl_timer.stop()
                     self._nb_ctrl_recording = False
-                    self._nb_ctrl_record_btn.setText('Record')
+                    self._nb_ctrl_record_btn.setText(i18n.t('settings.btn_record'))
                     self._nb_ctrl_record_btn.setEnabled(True)
                     self._nb_ctrl_display.setText(mask_to_name(saved_mask))
                     if _set_controller_hotkey_paused:
@@ -949,7 +970,7 @@ class SettingsDialog(QDialog):
                 self._nb_ctrl_recording = True
                 self._nb_ctrl_peak_mask = 0
                 self._nb_ctrl_display.setFocus()
-                self._nb_ctrl_record_btn.setText('Recording...')
+                self._nb_ctrl_record_btn.setText(i18n.t('settings.btn_recording'))
                 self._nb_ctrl_record_btn.setEnabled(False)
                 if _set_controller_hotkey_paused:
                     _set_controller_hotkey_paused(True)
@@ -963,10 +984,10 @@ class SettingsDialog(QDialog):
         # TAB: Waypoints
         # ══════════════════════════════════════════════════════════════
         wp_scroll, wp_layout = _make_tab_scroll()
-        tabs.addTab(wp_scroll, 'Waypoints')
+        tabs.addTab(wp_scroll, i18n.t('settings.tab_waypoints'))
 
-        section('Keyboard hotkey', wp_layout)
-        wp_hk_lbl = QLabel('Open hotkey')
+        section(i18n.t('settings.section_keyboard_hotkey'), wp_layout)
+        wp_hk_lbl = QLabel(i18n.t('settings.open_hotkey_label'))
         self._waypoints_hk = QKeySequenceEdit()
         self._waypoints_hk.setFixedHeight(32)
         self._waypoints_hk.setAttribute(Qt.WA_StyledBackground, True)
@@ -980,7 +1001,7 @@ class SettingsDialog(QDialog):
             wp_hk_line.setStyleSheet(
                 "QLineEdit{background:#e2e8f0;color:#111827;border:none;"
                 "selection-background-color:#ffd060;selection-color:#111827;}")
-        self._waypoints_hk.setToolTip('Restart overlay for the new hotkey to take effect')
+        self._waypoints_hk.setToolTip(i18n.t('settings.hotkey_restart_tooltip'))
         self._waypoints_hk._hk_finalized = False
 
         def _wp_on_seq_changed(seq):
@@ -1021,7 +1042,7 @@ class SettingsDialog(QDialog):
         wp_hk_row_layout.setContentsMargins(0, 0, 0, 0)
         wp_hk_row_layout.setSpacing(6)
         wp_hk_row_layout.addWidget(self._waypoints_hk)
-        wp_hk_clear_btn = QPushButton('Clear')
+        wp_hk_clear_btn = QPushButton(i18n.t('settings.btn_clear'))
         wp_hk_clear_btn.setFixedHeight(32)
         wp_hk_clear_btn.setStyleSheet(
             "QPushButton{background:rgba(255,80,80,.15);border:1px solid rgba(255,80,80,.4);"
@@ -1031,14 +1052,14 @@ class SettingsDialog(QDialog):
         wp_hk_row_layout.addWidget(wp_hk_clear_btn)
         active_layout[0].addWidget(wp_hk_lbl)
         active_layout[0].addWidget(wp_hk_row)
-        wp_hk_note = QLabel('Restart required to apply hotkey change.')
+        wp_hk_note = QLabel(i18n.t('settings.note_hotkey_restart'))
         wp_hk_note.setStyleSheet('color:#64748b; font:11px "Segoe UI"; margin-top:-4px;')
         active_layout[0].addWidget(wp_hk_note)
 
         # Controller combo
         if _HAS_CONTROLLER_HOTKEYS:
-            section('Controller', wp_layout)
-            active_layout[0].addWidget(QLabel('Open combo'))
+            section(i18n.t('settings.section_controller'), wp_layout)
+            active_layout[0].addWidget(QLabel(i18n.t('settings.open_combo_label')))
             ctrl_row = QWidget()
             ctrl_row_layout = QHBoxLayout(ctrl_row)
             ctrl_row_layout.setContentsMargins(0, 0, 0, 0)
@@ -1051,7 +1072,7 @@ class SettingsDialog(QDialog):
             self._wp_ctrl_display.setStyleSheet(
                 "QLineEdit{background:#e2e8f0;color:#111827;border:1px solid #64748b;"
                 "border-radius:6px;padding:4px 8px;}")
-            self._wp_ctrl_record_btn = QPushButton('Record')
+            self._wp_ctrl_record_btn = QPushButton(i18n.t('settings.btn_record'))
             self._wp_ctrl_record_btn.setFixedHeight(32)
             self._wp_ctrl_record_btn.setStyleSheet(
                 "QPushButton{background:rgba(255,208,96,.18);"
@@ -1061,7 +1082,7 @@ class SettingsDialog(QDialog):
                 "QPushButton:disabled{color:#666;border-color:#444;background:#222;}")
             ctrl_row_layout.addWidget(self._wp_ctrl_display)
             ctrl_row_layout.addWidget(self._wp_ctrl_record_btn)
-            _wp_ctrl_clear_btn = QPushButton('Clear')
+            _wp_ctrl_clear_btn = QPushButton(i18n.t('settings.btn_clear'))
             _wp_ctrl_clear_btn.setFixedHeight(32)
             _wp_ctrl_clear_btn.setStyleSheet(
                 "QPushButton{background:rgba(255,80,80,.15);border:1px solid rgba(255,80,80,.4);"
@@ -1069,7 +1090,7 @@ class SettingsDialog(QDialog):
                 "QPushButton:hover{background:rgba(255,80,80,.3);}")
 
             def _wp_ctrl_clear():
-                self._wp_ctrl_display.setText('None')
+                self._wp_ctrl_display.setText(i18n.t('settings.display_none'))
                 try:
                     existing = _load_controller_hotkey_settings()
                     existing["open_waypoints"] = 0
@@ -1080,16 +1101,13 @@ class SettingsDialog(QDialog):
             _wp_ctrl_clear_btn.clicked.connect(_wp_ctrl_clear)
             ctrl_row_layout.addWidget(_wp_ctrl_clear_btn)
             active_layout[0].addWidget(ctrl_row)
-            ctrl_note = QLabel(
-                'Hold button combo on controller, then release. Restart required.')
+            ctrl_note = QLabel(i18n.t('settings.note_controller_combo'))
             ctrl_note.setWordWrap(True)
             ctrl_note.setStyleSheet(
                 'color:#64748b; font:11px "Segoe UI"; margin-top:-4px;')
             active_layout[0].addWidget(ctrl_note)
 
-            wp_nav_help = QLabel(
-                'In popup: D-pad Up/Down navigate, A selects/teleports, '
-                'Y deletes, B closes.')
+            wp_nav_help = QLabel(i18n.t('settings.help_waypoints_controls'))
             wp_nav_help.setWordWrap(True)
             wp_nav_help.setStyleSheet(
                 'color:#7c8db5; font:11px "Segoe UI"; margin-top:4px;')
@@ -1108,7 +1126,7 @@ class SettingsDialog(QDialog):
                     saved_mask = self._wp_ctrl_peak_mask
                     self._wp_ctrl_timer.stop()
                     self._wp_ctrl_recording = False
-                    self._wp_ctrl_record_btn.setText('Record')
+                    self._wp_ctrl_record_btn.setText(i18n.t('settings.btn_record'))
                     self._wp_ctrl_record_btn.setEnabled(True)
                     self._wp_ctrl_display.setText(mask_to_name(saved_mask))
                     if _set_controller_hotkey_paused:
@@ -1128,7 +1146,7 @@ class SettingsDialog(QDialog):
                 self._wp_ctrl_recording = True
                 self._wp_ctrl_peak_mask = 0
                 self._wp_ctrl_display.setFocus()
-                self._wp_ctrl_record_btn.setText('Recording...')
+                self._wp_ctrl_record_btn.setText(i18n.t('settings.btn_recording'))
                 self._wp_ctrl_record_btn.setEnabled(False)
                 if _set_controller_hotkey_paused:
                     _set_controller_hotkey_paused(True)
@@ -1142,18 +1160,18 @@ class SettingsDialog(QDialog):
         # TAB: Direction
         # ══════════════════════════════════════════════════════════════
         arrow_scroll, arrow_layout = _make_tab_scroll()
-        tabs.addTab(arrow_scroll, 'Direction')
+        tabs.addTab(arrow_scroll, i18n.t('settings.tab_direction'))
 
-        section('Direction arrow', arrow_layout)
-        option('rotateWithPlayer', 'Rotate map with player',
-               'The map rotates to always show the player\'s forward direction at the top')
-        option('rotateWithCamera', 'Rotate map with camera',
-               'The map rotates using the camera heading received via WebSocket')
+        section(i18n.t('settings.section_direction_arrow'), arrow_layout)
+        option('rotateWithPlayer', i18n.t('settings.option_rotate_with_player'),
+               i18n.t('settings.option_rotate_with_player_desc'))
+        option('rotateWithCamera', i18n.t('settings.option_rotate_with_camera'),
+               i18n.t('settings.option_rotate_with_camera_desc'))
         self._checkboxes['rotateWithPlayer'].toggled.connect(
             lambda checked: checked and self._checkboxes['rotateWithCamera'].setChecked(False))
         self._checkboxes['rotateWithCamera'].toggled.connect(
             lambda checked: checked and self._checkboxes['rotateWithPlayer'].setChecked(False))
-        active_layout[0].addWidget(QLabel('Source'))
+        active_layout[0].addWidget(QLabel(i18n.t('settings.source_label')))
         self._heading_combo = QComboBox()
         self._heading_combo.setFixedHeight(32)
         self._heading_combo.setStyleSheet(
@@ -1169,17 +1187,14 @@ class SettingsDialog(QDialog):
             "QComboBox QAbstractItemView{background:#f8fafc;color:#111827;"
             "selection-background-color:#ffd060;selection-color:#111827;"
             "border:1px solid #475569;}")
-        self._heading_combo.addItem('Auto (entity \u2192 delta)', 'auto')
-        self._heading_combo.addItem('Forward vector (entity)', 'entity')
-        self._heading_combo.addItem('Position delta', 'delta')
+        self._heading_combo.addItem(i18n.t('settings.combo_heading_auto'), 'auto')
+        self._heading_combo.addItem(i18n.t('settings.combo_heading_entity'), 'entity')
+        self._heading_combo.addItem(i18n.t('settings.combo_heading_delta'), 'delta')
         current_src = cfg.get('headingSource', SETTING_DEFAULTS['headingSource'])
         idx = self._heading_combo.findData(current_src)
         if idx >= 0:
             self._heading_combo.setCurrentIndex(idx)
-        self._heading_combo.setToolTip(
-            'auto: uses forward vector when available, falls back to delta\n'
-            'entity: uses entity+0x80/0x88 only (works while standing still)\n'
-            'delta: always computes from position difference')
+        self._heading_combo.setToolTip(i18n.t('settings.tooltip_heading_source'))
         active_layout[0].addWidget(self._heading_combo)
 
         arrow_layout.addStretch(1)
@@ -1188,14 +1203,13 @@ class SettingsDialog(QDialog):
         # TAB: Performance
         # ══════════════════════════════════════════════════════════════
         perf_scroll, perf_layout = _make_tab_scroll()
-        tabs.addTab(perf_scroll, 'Performance')
+        tabs.addTab(perf_scroll, i18n.t('settings.tab_performance'))
 
-        section('Performance', perf_layout)
-        option('disableGpuVsync', 'Disable GPU vsync (multi-monitor fix)',
-               'Fixes FPS cap when using the overlay on a secondary monitor with '
-               'a different refresh rate. Requires restart.')
+        section(i18n.t('settings.section_performance'), perf_layout)
+        option('disableGpuVsync', i18n.t('settings.option_disable_gpu_vsync'),
+               i18n.t('settings.option_disable_gpu_vsync_desc'))
 
-        active_layout[0].addWidget(QLabel('Realtime transport'))
+        active_layout[0].addWidget(QLabel(i18n.t('settings.realtime_transport_label')))
         self._realtime_transport_combo = QComboBox()
         self._realtime_transport_combo.setFixedHeight(32)
         self._realtime_transport_combo.setStyleSheet(
@@ -1211,8 +1225,8 @@ class SettingsDialog(QDialog):
             "QComboBox QAbstractItemView{background:#f8fafc;color:#111827;"
             "selection-background-color:#ffd060;selection-color:#111827;"
             "border:1px solid #475569;}")
-        self._realtime_transport_combo.addItem('WebSocket', 'websocket')
-        self._realtime_transport_combo.addItem('Native bridge (experimental)', 'native')
+        self._realtime_transport_combo.addItem(i18n.t('settings.combo_realtime_websocket'), 'websocket')
+        self._realtime_transport_combo.addItem(i18n.t('settings.combo_realtime_native'), 'native')
         current_transport = cfg.get(
             'realtimeTransport', SETTING_DEFAULTS['realtimeTransport'])
         idx = self._realtime_transport_combo.findData(current_transport)
@@ -1221,7 +1235,7 @@ class SettingsDialog(QDialog):
                 SETTING_DEFAULTS['realtimeTransport'])
         self._realtime_transport_combo.setCurrentIndex(idx)
         active_layout[0].addWidget(self._realtime_transport_combo)
-        rt_note = QLabel('Restart overlay or reload the map to apply transport changes.')
+        rt_note = QLabel(i18n.t('settings.note_realtime_transport'))
         rt_note.setWordWrap(True)
         rt_note.setStyleSheet('color:#64748b; font:11px "Segoe UI"; margin-top:-4px;')
         active_layout[0].addWidget(rt_note)
@@ -1230,9 +1244,9 @@ class SettingsDialog(QDialog):
 
         # ── Botões Save/Cancel ─────────────────────────────────────────
         btn_row = QHBoxLayout()
-        cancel_btn = QPushButton('Cancel')
+        cancel_btn = QPushButton(i18n.t('settings.cancel'))
         cancel_btn.clicked.connect(self._on_cancel)
-        save_btn = QPushButton('Save')
+        save_btn = QPushButton(i18n.t('settings.save'))
         save_btn.setObjectName('save')
         save_btn.clicked.connect(self.accept)
         btn_row.addWidget(cancel_btn)
@@ -1253,6 +1267,7 @@ class SettingsDialog(QDialog):
         result['realtimeTransport'] = self._realtime_transport_combo.currentData()
         result['nearbyThreshold'] = self._nearby_radius.value() / 1000.0
         result['mapIconScale'] = self._map_icon_scale.value() / 10.0
+        result['language'] = self._lang_combo.currentData()
         self._save_nearby_hotkey()
         return result
 
@@ -1452,7 +1467,7 @@ class InterceptPage(QWebEnginePage):
 class LoginPrompt(QDialog):
     def __init__(self, parent=None):
         super().__init__(parent)
-        self.setWindowTitle('Login required')
+        self.setWindowTitle(i18n.t('login.title'))
         self.setWindowFlags(Qt.Dialog | Qt.WindowStaysOnTopHint | Qt.FramelessWindowHint)
         self.setStyleSheet("""
             QDialog   { background:#0f0f1a; border:1px solid #2d2d44; border-radius:8px; }
@@ -1474,16 +1489,16 @@ class LoginPrompt(QDialog):
         icon.setAlignment(Qt.AlignCenter)
         layout.addWidget(icon)
 
-        msg = QLabel('You need to log in\nto access the map.')
+        msg = QLabel(i18n.t('login.message'))
         msg.setAlignment(Qt.AlignCenter)
         msg.setStyleSheet('color:#e2e8f0; font:13px "Segoe UI"; background:transparent;')
         layout.addWidget(msg)
 
         row = QHBoxLayout()
-        no_btn = QPushButton('Not now')
+        no_btn = QPushButton(i18n.t('login.btn_not_now'))
         no_btn.setObjectName('no')
         no_btn.clicked.connect(self.reject)
-        yes_btn = QPushButton('Go to login')
+        yes_btn = QPushButton(i18n.t('login.btn_go_to_login'))
         yes_btn.setObjectName('yes')
         yes_btn.clicked.connect(self.accept)
         row.addWidget(no_btn)
@@ -1536,11 +1551,11 @@ QPushButton { background:transparent; border:none;
             row.addWidget(b)
             return b
 
-        self.btn_back     = icon_btn('btn_back',     '\u25c0', 'Back')
-        self.btn_settings = icon_btn('btn_settings', '\u2699', 'Settings')
-        self.btn_hide     = icon_btn('btn_hide',     '\u2013', 'Hide')
-        self.btn_maximize = icon_btn('btn_maximize', '\u25a1', 'Maximize')
-        self.btn_close    = icon_btn('btn_close',    '\u2715', 'Close')
+        self.btn_back     = icon_btn('btn_back',     '\u25c0', i18n.t('titlebar.btn_back'))
+        self.btn_settings = icon_btn('btn_settings', '\u2699', i18n.t('titlebar.btn_settings'))
+        self.btn_hide     = icon_btn('btn_hide',     '\u2013', i18n.t('titlebar.btn_hide'))
+        self.btn_maximize = icon_btn('btn_maximize', '\u25a1', i18n.t('titlebar.btn_maximize'))
+        self.btn_close    = icon_btn('btn_close',    '\u2715', i18n.t('titlebar.btn_close'))
 
     def set_compact(self, compact):
         self._lbl.setVisible(not compact)
@@ -1549,10 +1564,10 @@ QPushButton { background:transparent; border:none;
     def set_maximized(self, maximized):
         if maximized:
             self.btn_maximize.setText('\u274e')
-            self.btn_maximize.setToolTip('Restore')
+            self.btn_maximize.setToolTip(i18n.t('titlebar.btn_restore'))
         else:
             self.btn_maximize.setText('\u25a1')
-            self.btn_maximize.setToolTip('Maximize')
+            self.btn_maximize.setToolTip(i18n.t('titlebar.btn_maximize'))
 
     def mouseDoubleClickEvent(self, e):
         if e.button() == Qt.LeftButton:

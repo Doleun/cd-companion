@@ -291,7 +291,7 @@
 <html>
 <head>
   <meta charset="utf-8">
-  <title>Nearby Locations</title>
+  <title>${_t('nearby.window_title')}</title>
   ${_iconCssHref ? `<link rel="stylesheet" href="${_iconCssHref}">` : ''}
   <style>
     html,body{margin:0;width:100%;height:100%;overflow:hidden;
@@ -360,30 +360,30 @@
 <body tabindex="0">
   <div class="wrap">
     <div class="header">
-      <div class="header-title">📍 Nearby</div>
+      <div class="header-title">${_t('nearby.title')}</div>
       <div class="header-count" id="hcount"></div>
-      <button class="header-toggle" id="mapFilterToggle" title="Respect the categories currently visible on the map">Map filters</button>
-      <button class="header-toggle" id="stayInListToggle" title="When enabled, focus stays in the current list after marking/unmarking">Stay in list</button>
+      <button class="header-toggle" id="mapFilterToggle" title="${_t('nearby.map_filters_title_off')}">Map filters</button>
+      <button class="header-toggle" id="stayInListToggle" title="${_t('nearby.stay_in_list_title_off')}">Stay in list</button>
     </div>
     <div class="content">
       <div class="lists">
         <div class="list-pane" id="notfoundPane">
-          <div class="list-head"><span>Not found</span><span class="list-count" id="notfoundCount"></span></div>
+          <div class="list-head"><span>${_t('nearby.not_found_header')}</span><span class="list-count" id="notfoundCount"></span></div>
           <div class="list" id="notfoundList"></div>
         </div>
         <div class="list-pane" id="foundPane">
-          <div class="list-head"><span>Found</span><span class="list-count" id="foundCount"></span></div>
+          <div class="list-head"><span>${_t('nearby.found_header')}</span><span class="list-count" id="foundCount"></span></div>
           <div class="list" id="foundList"></div>
         </div>
       </div>
       <div class="details" id="details"></div>
     </div>
     <div class="footer">
-      <span style="margin-right: 5px"><b>Left/Right</b> List</span>
-      <span style="margin-right: 5px"><b>Up/Down, W/S, D-pad</b> Navigate</span>
-      <span style="margin-right: 5px"><b>Enter, Space, A</b> Mark</span>
-      <span style="margin-right: 5px"><b>Select/View</b> Filters</span>
-      <span><b>Esc, B</b> Close</span>
+      <span style="margin-right: 5px"><b>${_t('nearby.footer_list')}</b> ${_t('nearby.footer_list_label')}</span>
+      <span style="margin-right: 5px"><b>${_t('nearby.footer_navigate')}</b> ${_t('nearby.footer_navigate_label')}</span>
+      <span style="margin-right: 5px"><b>${_t('nearby.footer_mark')}</b> ${_t('nearby.footer_mark_label')}</span>
+      <span style="margin-right: 5px"><b>${_t('nearby.footer_filters')}</b> ${_t('nearby.footer_filters_label')}</span>
+      <span><b>${_t('nearby.footer_close')}</b> ${_t('nearby.footer_close_label')}</span>
     </div>
   </div>
   <script>
@@ -400,20 +400,20 @@
       if (!btn) return;
       const enabled = _nearbyRespectMapVisibility();
       btn.className = `header-toggle ${enabled ? 'on' : 'off'}`;
-      btn.textContent = enabled ? 'Map filters ON' : 'Map filters OFF';
+      btn.textContent = enabled ? _t('nearby.map_filters_on') : _t('nearby.map_filters_off');
       btn.title = enabled
-        ? 'Nearby follows the categories currently visible on the map'
-        : 'Nearby shows all categories, ignoring map category visibility';
+        ? _t('nearby.map_filters_title_on')
+        : _t('nearby.map_filters_title_off');
     }
     function syncStayInListToggle() {
       const btn = doc.getElementById('stayInListToggle');
       if (!btn) return;
       const enabled = _nearbyStayInList();
       btn.className = `header-toggle ${enabled ? 'on' : 'off'}`;
-      btn.textContent = enabled ? 'Stay in list ON' : 'Stay in list OFF';
+      btn.textContent = enabled ? _t('nearby.stay_in_list_on') : _t('nearby.stay_in_list_off');
       btn.title = enabled
-        ? 'Focus stays in the current list after marking/unmarking'
-        : 'Focus follows the item to the other list after marking/unmarking';
+        ? _t('nearby.stay_in_list_title_on')
+        : _t('nearby.stay_in_list_title_off');
     }
 
     function toggleMapFilterMode() {
@@ -433,7 +433,9 @@
         clearNearbySelection(false);
         return;
       }
-      if (hcount) hcount.textContent = `${items.length} location${items.length !== 1 ? 's' : ''}`;
+      if (hcount) hcount.textContent = items.length === 1
+        ? _t('nearby.count_single').replace('{0}', items.length)
+        : _t('nearby.count_plural').replace('{0}', items.length);
       syncMapFilterToggle();
 
       // Fingerprint: skip render se ids, found e seleção não mudaram
@@ -571,7 +573,7 @@
     function renderList(list, group) {
       if (!list) return;
       if (!group.length) {
-        list.innerHTML = '<div class="empty small">No locations</div>';
+        list.innerHTML = `<div class="empty small">${_t('nearby.empty_small')}</div>`;
         return;
       }
 
@@ -631,15 +633,17 @@
       ensureNearbySelection();
       const notfoundItems = nearbyGroup(false);
       const foundItems = nearbyGroup(true);
-      if (hcount) hcount.textContent = `${items.length} location${items.length !== 1 ? 's' : ''}`;
+      if (hcount) hcount.textContent = items.length === 1
+        ? _t('nearby.count_single').replace('{0}', items.length)
+        : _t('nearby.count_plural').replace('{0}', items.length);
       if (notfoundCount) notfoundCount.textContent = String(notfoundItems.length);
       if (foundCount) foundCount.textContent = String(foundItems.length);
       if (notfoundPane) notfoundPane.classList.toggle('active', !activeFoundList);
       if (foundPane) foundPane.classList.toggle('active', activeFoundList);
 
       if (items.length === 0) {
-        notfoundList.innerHTML = '<div class="empty small">No location nearby</div>';
-        foundList.innerHTML = '<div class="empty small">No location nearby</div>';
+        notfoundList.innerHTML = `<div class="empty small">${_t('nearby.empty_small')}</div>`;
+        foundList.innerHTML = `<div class="empty small">${_t('nearby.empty_small')}</div>`;
         if (hcount) hcount.textContent = '';
         renderDetails(null);
         clearNearbySelection(false);
@@ -677,7 +681,7 @@
       if (!item) {
         lastDetailsId = null;
         lastDetailsFound = null;
-        detailEl.innerHTML = '<div class="details-empty">Select a nearby location</div>';
+        detailEl.innerHTML = `<div class="details-empty">${_t('nearby.select_prompt')}</div>`;
         return;
       }
       if (lastDetailsId === item.id && lastDetailsFound === item.found) return;
